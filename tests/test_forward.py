@@ -54,3 +54,12 @@ def test_xu_psic_equals_builtin_psic():
                                        detector_names=["nu", "delta"])
     for a in random_angles(PSIC, 20):
         assert np.allclose(geom.q_phi(a, 3.0), PSIC.q_phi(a, 3.0))
+
+
+def test_b_matrix_matches_diffcalc():
+    pytest.importorskip("diffcalc")
+    from diffcalc.ub.crystal import Crystal
+    from hklforge.lattice import b_matrix
+    for _ in range(30):
+        lat = (*rng.uniform(3, 9, 3), *rng.uniform(70, 115, 3))
+        assert np.allclose(b_matrix(*lat), Crystal("x", *lat).B, atol=1e-12)

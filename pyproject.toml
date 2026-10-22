@@ -10,8 +10,10 @@ requires-python = ">=3.10"
 dependencies = ["numpy", "pyyaml"]
 
 [project.optional-dependencies]
+draw = ["matplotlib"]
 # reference implementations the tests compare against
-test = ["pytest", "scipy", "diffcalc-core", "xrayutilities"]
+test = ["pytest", "scipy", "diffcalc-core", "xrayutilities", "matplotlib", "pandas"]
+examples = ["matplotlib", "pandas", "jupyter", "diffcalc-core", "xrayutilities"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
