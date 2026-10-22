@@ -1,0 +1,13 @@
+name: fourcv
+description: |
+  Eulerian four-circle, vertical scattering plane (Busing & Levy 1967).
+  The psic geometry with mu = nu = 0: omega is psic's eta, tth its delta.
+  Lab frame: x vertical, y along the beam, z transverse.
+labels: {x: vertical, y: beam, z: transverse}
+beam: y+
+sample:
+  - {name: omega, axis: z-}
+  - {name: chi,   axis: y+}
+  - {name: phi,   axis: z-}
+detector:
+  - {name: tth,   axis: z-}

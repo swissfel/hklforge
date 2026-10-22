@@ -1,0 +1,16 @@
+name: psic
+description: |
+  You (1999) "4S+2D" six-circle diffractometer, as used by diffcalc-core
+  (and libhkl's E6C, where eta is called omega and nu gamma).
+  Lab frame: x vertical, y along the beam, z transverse.
+  At SwissFEL Bernina the out-of-plane detector circle nu is called gamma.
+labels: {x: vertical, y: beam, z: transverse}
+beam: y+
+sample:            # outermost first
+  - {name: mu,  axis: x+}
+  - {name: eta, axis: z-}
+  - {name: chi, axis: y+}
+  - {name: phi, axis: z-}
+detector:
+  - {name: nu,    axis: x+}
+  - {name: delta, axis: z-}

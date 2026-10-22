@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hklforge"
+version = "0.0.1"
+description = "Diffractometer angle solvers generated exactly from a declared geometry"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pyyaml"]
+
+[project.optional-dependencies]
+# reference implementations the tests compare against
+test = ["pytest", "scipy", "diffcalc-core", "xrayutilities"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"hklforge.geometries" = ["*.yml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
