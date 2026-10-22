@@ -5,6 +5,8 @@ description: |
   Lab frame: x vertical, y along the beam, z transverse.
 labels: {x: vertical, y: beam, z: transverse}
 beam: y+
+azimuth_zero: z+   # qaz = naz = 0 along z, 90 deg along x (vertical)
+bisect_circle: chi
 sample:
   - {name: omega, axis: z-}
   - {name: chi,   axis: y+}

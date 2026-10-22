@@ -6,6 +6,8 @@ description: |
   At SwissFEL Bernina the out-of-plane detector circle nu is called gamma.
 labels: {x: vertical, y: beam, z: transverse}
 beam: y+
+azimuth_zero: z+   # qaz = naz = 0 along z, 90 deg along x (vertical)
+bisect_circle: chi
 sample:            # outermost first
   - {name: mu,  axis: x+}
   - {name: eta, axis: z-}

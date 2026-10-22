@@ -6,8 +6,11 @@ sys.path[:0] = ["src", "tests"]
 import test_solve_diffcalc as T
 
 def family(names):
-    kinds = ["det" if n in T.DETECTOR else "ref" if n in T.REFS else "samp" for n in names]
-    return "+".join(f"{kinds.count(k)}{k}" for k in ("det", "ref", "samp") if kinds.count(k))
+    if "bisect" in names:
+        return f"{names[0]}+bisect+{names[1]}"
+    kinds = [n if n in ("qaz", "naz", "psi") else "det" if n in T.DETECTOR else "ref" if n in T.REFS
+             else "samp" for n in names]
+    return "+".join(f"{kinds.count(k)}{k}" for k in dict.fromkeys(kinds))
 
 stats = collections.defaultdict(lambda: collections.Counter())
 skips = collections.Counter()
@@ -20,10 +23,13 @@ for names in T.MODES:
         except pytest.skip.Exception as e:
             skips[str(e)[:45]] += 1; stats[f]["skipped"] += 1; continue
         if m is None:
-            stats[f]["diffcalc wrong, hklforge verified by diffcalc get_hkl"] += 1; continue
+            stats[f]["diffcalc failed, hklforge verified by diffcalc get_hkl"] += 1; continue
         stats[f]["cases"] += 1; stats[f]["with solutions"] += n > 0
         stats[f][f"{n} branches"] += 1
 print(f"{time.time() - t0:.1f} s, every non-skipped case: identical branch sets")
 for f, c in stats.items():
     print(f, dict(sorted(c.items())))
-print(dict(skips))
+print("skips:", dict(skips))
+print("diffcalc bisect-mode positions violating bisect/omega:", sum(T.BISECT_BAD),
+      "of", len(T.BISECT_BAD), "bisect comparisons")
+print("diffcalc crashes / self-check failures:", collections.Counter(c[1] for c in T.CRASHES))

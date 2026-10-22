@@ -6,7 +6,8 @@ import logging
 import numpy as np
 import pytest
 
-from hklforge import Diffractometer, Geometry
+from hklforge import Diffractometer, Geometry, ModeError
+from hklforge.virtual import bisect_axis
 
 diffcalc = pytest.importorskip("diffcalc")
 from diffcalc.hkl.calc import HklCalculation          # noqa: E402
@@ -19,12 +20,14 @@ logging.getLogger("diffcalc").setLevel(logging.ERROR)
 
 PSIC = Geometry.builtin("psic")
 SAMPLE = ("mu", "eta", "chi", "phi")
-DETECTOR = ("delta", "nu")
-REFS = ("betain", "betaout", "bin_eq_bout", "alpha", "beta", "a_eq_b")
+DETECTOR = ("delta", "nu", "qaz", "naz")
+REFS = ("betain", "betaout", "bin_eq_bout", "alpha", "beta", "a_eq_b", "psi")
+BISECT = (("mu", "bisect"), ("eta", "bisect"), ("omega", "bisect"))
 
+# every combination diffcalc 0.4 implements (Constraints.is_current_mode_implemented)
 MODES = (
-    [s for s in itertools.combinations(SAMPLE, 3)]
-    + [(d,) + s for d in DETECTOR for s in itertools.combinations(SAMPLE, 2)]
+    list(itertools.combinations(SAMPLE, 3))
+    + [(d,) + s for d in DETECTOR for s in list(itertools.combinations(SAMPLE, 2)) + list(BISECT)]
     + [s + (r,) for s in itertools.combinations(SAMPLE, 2) for r in REFS]
     + [(d, r, s) for d in DETECTOR for r in REFS for s in SAMPLE]
 )
@@ -43,11 +46,28 @@ def random_setup(rng):
 
 
 def random_value(name, rng):
-    if name in ("bin_eq_bout", "a_eq_b"):
+    if name in ("bin_eq_bout", "a_eq_b", "bisect"):
         return True
+    if name == "omega":
+        return float(rng.uniform(-30, 30))
+    if name in ("psi", "naz", "qaz"):
+        return float(rng.uniform(-180, 180))
     if name in REFS:
         return float(rng.uniform(-20, 40))
     return float(rng.uniform(-170, 170))
+
+
+CRASHES = []             # diffcalc exceptions other than "no solution"
+BISECT_BAD = []          # per comparison: diffcalc bisect-mode positions that violate the mode
+
+
+def bisect_error(d, a, mode):
+    e = bisect_axis(PSIC, a)
+    Q = PSIC.q_lab(a, 1.0)
+    err = abs(e @ np.cross(PSIC.beam, Q / np.linalg.norm(Q)))
+    if "omega" in mode:
+        err = max(err, np.radians(abs((d.pseudo(a)["omega"] - mode["omega"] + 180) % 360 - 180)))
+    return err
 
 
 def same(a, b, tol=1e-5):
@@ -64,12 +84,28 @@ def compare(names, seed):
         if 0 < np.linalg.norm(ub.UB @ hkl) < 1.8 * 2 * np.pi / lam:
             break
     mode = {n: random_value(n, rng) for n in names}
+    if "naz" in mode and set(mode) & {"betain", "betaout", "bin_eq_bout"}:
+        # diffcalc solves naz for the surface normal here, but filters its results
+        # by naz of the reference vector, so it only answers when the two coincide
+        ref = surf
+        ub.n_phi = tuple(surf)
     d = Diffractometer(PSIC, ub.UB, wavelength=lam, surface=surf, reference=ref)
-    mine = d.solve(hkl, mode)
+    try:
+        mine = d.solve(hkl, mode)
+    except ModeError as e:
+        pytest.skip(f"hklforge does not support this mode: {e}")
     try:
         theirs = [p.asdict for p, _ in HklCalculation(ub, Constraints(mode)).get_position(*hkl, lam)]
-    except AssertionError as e:
-        pytest.skip(f"diffcalc internal assertion: {str(e)[:60]}")
+    except (AssertionError, ValueError) as e:
+        # diffcalc crashes (e.g. asin domain error in its eta + bisect branch):
+        # judge ours by diffcalc's forward model and the mode's own equations
+        fwd = HklCalculation(ub, Constraints({}))
+        for a in mine:
+            assert np.allclose(fwd.get_hkl(Position(**a), lam), hkl, atol=1e-9)
+            if "bisect" in mode:
+                assert bisect_error(d, a, mode) < 1e-9
+        CRASHES.append((names, type(e).__name__, str(e)[:40]))
+        return len(mine), None
     except DiffcalcException as e:
         msg = " ".join(str(e).replace("*", " ").split())
         if "The angles calculated for hkl" in msg:
@@ -83,6 +119,13 @@ def compare(names, seed):
         if "No solutions were found" not in msg and "prohibits a solution" not in msg:
             pytest.skip(f"diffcalc refuses: {msg[:80]}")
         theirs = []
+    if "bisect" in mode:
+        # diffcalc also returns positions violating bisect / omega (inconsistent
+        # mu/eta pairings in calc_sample); they must be clear violations
+        good = [x for x in theirs if bisect_error(d, x, mode) < 1e-9]
+        assert all(bisect_error(d, x, mode) > 1e-6 for x in theirs if x not in good)
+        BISECT_BAD.append(len(theirs) - len(good))
+        theirs = good
     missing = [x for x in theirs if not any(same(x, m) for m in mine)]
     extra = [m for m in mine if not any(same(m, x) for x in theirs)]
     assert not missing and not extra, (mode, hkl, lam, missing, extra)
@@ -90,8 +133,8 @@ def compare(names, seed):
         assert np.allclose(d.hkl(a), hkl, atol=1e-9)
         pa = d.pseudo(a)
         for n, v in mode.items():
-            if n in ("betain", "betaout", "alpha", "beta"):
-                assert abs(pa[n] - v) < 1e-7
+            if n in ("betain", "betaout", "alpha", "beta", "psi", "naz", "qaz", "omega"):
+                assert abs((pa[n] - v + 180) % 360 - 180) < 1e-6, (n, pa[n], v)
         if "bin_eq_bout" in mode:
             assert abs(pa["betain"] - pa["betaout"]) < 1e-7
         if "a_eq_b" in mode:

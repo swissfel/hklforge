@@ -33,11 +33,18 @@ E6C_AXES = ["mu", "omega", "chi", "phi", "gamma", "delta"]
 TO_PSIC = {"mu": "mu", "omega": "eta", "chi": "chi", "phi": "phi", "gamma": "nu", "delta": "delta"}
 MODES = ["constant_omega_vertical", "constant_chi_vertical", "constant_phi_vertical",
          "constant_mu_horizontal", "lifting_detector_mu", "lifting_detector_omega",
-         "lifting_detector_phi", "double_diffraction_vertical", "double_diffraction_horizontal"]
-SKIPPED = {"bissector_vertical": "omega = delta/2 not in hklforge yet",
-           "bissector_horizontal": "bisect not in hklforge yet",
-           "psi_constant_vertical": "psi not in hklforge yet",
-           "psi_constant_horizontal": "psi not in hklforge yet"}
+         "lifting_detector_phi", "double_diffraction_vertical", "double_diffraction_horizontal",
+         "bissector_vertical", "bissector_horizontal", "psi_constant_vertical",
+         "psi_constant_horizontal"]
+# libhkl's bisector modes are omega = delta/2 (vertical) and mu = gamma/2 with
+# omega = 0 (horizontal), each modulo 180: the chi axis normal to Q, either
+# way round = hklforge's omega = 0 or 180 (with bisect). That holds only when
+# the held axes are 0, so they are run with the held axes at 0.
+HELD_AT_ZERO = ("bissector_vertical", "bissector_horizontal")
+HKLFORGE_EXTRA = {"bissector_vertical": [{"omega": 0.0}, {"omega": 180.0}],
+                  "bissector_horizontal": [{"bisect": True, "omega": 0.0},
+                                           {"bisect": True, "omega": 180.0}]}
+SKIPPED = {}
 
 
 def libhkl_setup(lattice, ub, wavelength):
@@ -56,14 +63,16 @@ def libhkl_setup(lattice, ub, wavelength):
     return g, el
 
 
-def libhkl_solutions(g, el, mode, hkl, held, h2, rng, n_starts=12):
+def libhkl_solutions(g, el, mode, hkl, held, h2, rng, n_starts=12, psi=None):
     eng = el.engine_get_by_name("hkl")
     eng.current_mode_set(mode)
-    if h2 is not None:
-        for name, v in zip(("h2", "k2", "l2"), h2):
-            p = eng.parameter_get(name)
-            p.value_set(float(v), USER)
-            eng.parameter_set(name, p)
+    params = {} if h2 is None else dict(zip(("h2", "k2", "l2"), h2))
+    if psi is not None:
+        params["psi"] = psi
+    for name, v in params.items():
+        p = eng.parameter_get(name)
+        p.value_set(float(v), USER)
+        eng.parameter_set(name, p)
     out, errors = [], 0
     for _ in range(n_starts):
         start = [held.get(n, float(rng.uniform(-180, 180))) for n in E6C_AXES]
@@ -80,6 +89,10 @@ def libhkl_solutions(g, el, mode, hkl, held, h2, rng, n_starts=12):
             if not any(same(psic, o) for o in out):
                 out.append(psic)
     return out, errors
+
+
+PSI_SIGN = 1.0     # hklforge psi = PSI_SIGN * libhkl psi (checked by PSI_SEEN below)
+PSI_SEEN = []
 
 
 def same(a, b, tol=1e-3):           # libhkl agrees with diffcalc to ~1e-6 in hkl only
@@ -110,26 +123,38 @@ def main(n_cases=20):
                     if 0 < np.linalg.norm(ub @ h) < 1.8 * k:
                         return h
             hkl = draw()
-            h2 = draw() if mode.startswith("double") else None
+            h2 = draw() if mode.startswith(("double", "psi")) else None
+            psi = float(rng.uniform(-180, 180)) if mode.startswith("psi") else None
             g0, el0 = libhkl_setup(lattice, ub, lam)
             eng = el0.engine_get_by_name("hkl")
             eng.current_mode_set(mode)
             write = eng.axis_names_get(Hkl.EngineAxisNamesGet.WRITE)
-            held = {n: float(rng.uniform(-60, 60)) for n in E6C_AXES if n not in write}
+            held = {n: 0.0 if mode in HELD_AT_ZERO else float(rng.uniform(-60, 60))
+                    for n in E6C_AXES if n not in write}
             hk_mode = {TO_PSIC[n]: v for n, v in held.items()}
-            if h2 is not None:
+            ref = None
+            if psi is not None:                       # libhkl's psi is about Q from (h2, k2, l2)
+                hk_mode["psi"] = PSI_SIGN * psi
+                ref = ub @ np.asarray(h2, float)
+            elif h2 is not None:
                 hk_mode["h2"] = h2
             try:
-                mine = Diffractometer(psic, ub, wavelength=lam).solve(hkl, hk_mode)
+                dm = Diffractometer(psic, ub, wavelength=lam, reference=ref)
+                mine = [a for extra in HKLFORGE_EXTRA.get(mode, [{}]) for a in dm.solve(hkl, hk_mode | extra)]
             except Exception as e:
                 print(f"  {mode}: hklforge {type(e).__name__}: {e}")
                 continue
-            theirs, errs = libhkl_solutions(g0, el0, mode, hkl, held, h2, rng)
+            theirs, errs = libhkl_solutions(g0, el0, mode, hkl, held, h2, rng, psi=psi)
+            if psi is not None and theirs:           # report libhkl's psi in hklforge's convention
+                dd = Diffractometer(psic, ub, wavelength=lam, reference=ref)
+                PSI_SEEN.append((psi, [dd.pseudo(t)["psi"] for t in theirs]))
             tot["cases"] += 1
             tot["libhkl"] += len(theirs)
             tot["hklforge"] += len(mine)
             tot["libhkl_errors"] += errs
             d = Diffractometer(psic, ub, wavelength=lam)
+            if psi is not None and h2 is not None:
+                h2 = None                            # h2 was the psi reference, not a reflection
             for t in theirs:
                 if any(same(t, m) for m in mine):
                     continue
@@ -149,3 +174,5 @@ def main(n_cases=20):
 
 if __name__ == "__main__":
     main(int(sys.argv[1]) if len(sys.argv) > 1 else 20)
+    for psi, seen in PSI_SEEN[:6]:
+        print(f"libhkl psi {psi:9.3f} -> hklforge psi of libhkl's solutions {np.round(seen, 3)}")

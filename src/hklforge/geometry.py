@@ -50,12 +50,21 @@ class Geometry:
     beam: tuple[float, float, float] = (0.0, 1.0, 0.0)
     description: str = ""
     labels: dict = field(default_factory=dict)   # e.g. {"x": "vertical"} for docs
+    azimuth_zero: tuple | None = None   # lab direction where qaz / naz = 0 (default: see azimuth_frame)
+    bisect_circle: str | None = None    # the circle whose axis 'bisect' / 'omega' refer to (psic: chi)
 
     def __post_init__(self):
         self.beam = tuple(unit(self.beam))
         names = [c.name for c in self.sample + self.detector]
         if len(set(names)) != len(names):
             raise ValueError(f"circle names must be unique, got {names}")
+        if self.bisect_circle is not None and self.bisect_circle not in self.sample_names:
+            raise ValueError(f"bisect_circle {self.bisect_circle!r} is not a sample circle")
+        if self.azimuth_zero is not None:
+            r = np.asarray(_axis(self.azimuth_zero), float)
+            b = np.asarray(self.beam)
+            r = r - b * (b @ r)
+            self.azimuth_zero = tuple(unit(r))
 
     # --- construction -------------------------------------------------------
 
@@ -70,6 +79,8 @@ class Geometry:
             beam=tuple(_axis(d.get("beam", (0, 1, 0)))),
             description=d.get("description", ""),
             labels=d.get("labels", {}),
+            azimuth_zero=d.get("azimuth_zero"),
+            bisect_circle=d.get("bisect_circle"),
         )
 
     @classmethod
@@ -121,6 +132,22 @@ class Geometry:
     @property
     def names(self) -> list[str]:
         return self.sample_names + self.detector_names
+
+    def azimuth_frame(self) -> tuple[np.ndarray, np.ndarray]:
+        """(r, u): azimuths about the beam (qaz, naz) are atan2(v.u, v.r).
+
+        r is ``azimuth_zero`` or, by default, the lab axis after the beam's in
+        cyclic order (beam y -> r = z); u = beam x r (beam y -> u = x). For psic
+        that is diffcalc's qaz = atan2(Q_x, Q_z): 90 deg = vertical scattering.
+        """
+        b = np.asarray(self.beam)
+        if self.azimuth_zero is not None:
+            r = np.asarray(self.azimuth_zero)
+        else:
+            i = int(np.argmax(np.abs(b)))
+            r = np.eye(3)[(i + 1) % 3]
+            r = unit(r - b * (b @ r))
+        return r, np.cross(b, r)
 
     def circle(self, name: str) -> Circle:
         for c in self.sample + self.detector:
