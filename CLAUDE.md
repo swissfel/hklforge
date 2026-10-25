@@ -187,6 +187,10 @@ optional code generation of a plan into readable Python, naz + bisect.
 ## Git
 
 Public at https://github.com/swissfel/hklforge (`main`), BSD-3-Clause,
-copyright Henrik Lemke. Not on PyPI yet (name free as of 2026-10-25; a name
-is only taken by uploading a release). `.vscode/settings.json` holds the
+copyright Henrik Lemke. On PyPI as `hklforge` since 0.0.1 (2026-10-25).
+CI: `.github/workflows/ci.yml` (tests, Python 3.10/3.12/3.13; test_double
+skipped there). Release: bump `version` in pyproject.toml, commit, then the
+owner pushes a tag `vX.Y.Z` -> `publish.yml` tests, checks tag = version,
+builds and uploads via PyPI trusted publishing (environment `pypi`). Tag
+pushes need the owner's go-ahead (they publish). `.vscode/settings.json` holds the
 owner's local editor changes - leave them out of commits.
