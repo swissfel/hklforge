@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,22 @@ name = "hklforge"
 version = "0.0.1"
 description = "Diffractometer angle solvers generated exactly from a declared geometry"
 requires-python = ">=3.10"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{name = "Henrik Lemke"}]
+readme = "README.md"
+keywords = ["diffraction", "diffractometer", "crystallography", "x-ray", "hkl", "synchrotron", "XFEL"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Intended Audience :: Science/Research",
+    "Development Status :: 3 - Alpha",
+]
 dependencies = ["numpy", "pyyaml"]
+
+[project.urls]
+Homepage = "https://github.com/swissfel/hklforge"
+Documentation = "https://github.com/swissfel/hklforge/tree/main/docs"
 
 [project.optional-dependencies]
 draw = ["matplotlib"]

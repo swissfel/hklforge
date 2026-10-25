@@ -186,5 +186,7 @@ optional code generation of a plan into readable Python, naz + bisect.
 
 ## Git
 
-Local repo only so far (`main`), no remote. The owner keeps related code under
-github.com/swissfel; ask before creating a remote or pushing.
+Public at https://github.com/swissfel/hklforge (`main`), BSD-3-Clause,
+copyright Henrik Lemke. Not on PyPI yet (name free as of 2026-10-25; a name
+is only taken by uploading a release). `.vscode/settings.json` holds the
+owner's local editor changes - leave them out of commits.

@@ -41,3 +41,9 @@ draw(d, angles, show=("ttheta", "psi"))
 ```
 
 Tests (`pytest`) compare against diffcalc-core and xrayutilities.
+
+## License
+
+BSD 3-Clause, see [LICENSE](LICENSE). The software is provided "as is",
+without warranty of any kind. Check computed angles against your
+instrument's limits before moving motors.
