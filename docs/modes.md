@@ -105,8 +105,8 @@ d.spots(sols[0], [(1, 1, 1), (2, 2, 0)], width=77, height=77)
 `spots` gives each reflection's outgoing direction, its angle from the detector
 axis, their separation and `tdet_max`: the largest sample-detector distance
 (units of width / height) that keeps every spot within `margin` (0.9) of the
-face's half sizes. The face axes default to the two lab axes after the beam in
-cyclic order (psic: width along z, height along x), as in the Bernina script.
+face's half sizes. The face axes default to height along the geometry's up
+and width across it (psic: width along z, height along x), as in the Bernina script.
 
 ## Other geometries
 
@@ -120,3 +120,20 @@ g.bisect_circle = "chi"          # only needed for bisect / omega
 or a YAML file like [`psic.yml`](../src/hklforge/geometries/psic.yml) with
 `azimuth_zero` and `bisect_circle`. The planner needs nothing else: modes,
 counting and solving follow from the axes.
+
+## Lab frames
+
+hklforge assumes no lab frame. A geometry states its beam direction
+(required) and, optionally, which way is `up`; the default azimuth frame
+(qaz/naz = 90 deg means up), the 3D drawings and the detector face follow
+from those two. The same instrument can be written in another frame:
+
+```python
+psic = Geometry.builtin("psic")                 # You: beam y, up x
+bernina = psic.reframed(beam="z+", up="y+")     # beam z, up y, x = y cross z
+M = psic.frame_rotation("z+", "y+")             # v_bernina = M @ v_psic
+d = Diffractometer(bernina, M @ ub, energy=9000)  # UB turns along, angles do not
+```
+
+Every angle and virtual angle is unchanged (`tests/test_frame.py`); only
+lab- and phi-frame vectors (UB, surface normal, reference) are turned by `M`.

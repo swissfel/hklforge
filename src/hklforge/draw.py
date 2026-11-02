@@ -6,8 +6,8 @@ bisect circle's axis - and draws each requested virtual angle as a labelled
 arc, using the definitions of :mod:`hklforge.virtual`. ``draw_circles``
 draws the geometry itself: every circle as a ring about its current axis.
 
-The plot is oriented so that the geometry's "vertical" lab axis (from its
-``labels``, e.g. psic x) points up and the beam runs left to right.
+The plot is oriented so that the geometry's up (``Geometry.up_direction``,
+e.g. psic x) points up and the beam runs left to right.
 """
 from __future__ import annotations
 
@@ -29,13 +29,7 @@ def _perp(v):
 def view_basis(geometry) -> np.ndarray:
     """Rows: plot x (beam), plot y (across), plot z (up), as lab vectors."""
     b = np.asarray(geometry.beam)
-    up = None
-    for axis, label in geometry.labels.items():
-        if str(label).lower() == "vertical":
-            up = np.eye(3)["xyz".index(axis)]
-    if up is None:
-        up = geometry.azimuth_frame()[1]
-    up = unit(up - b * (b @ up))
+    up = geometry.up_direction()
     return np.array([b, np.cross(up, b), up])
 
 

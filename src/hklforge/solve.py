@@ -536,14 +536,14 @@ class Diffractometer:
         the largest sample-detector distance (in the units of width/height)
         that keeps every spot within ``margin`` of the face's half sizes.
         ``face`` = (width axis, height axis) in the lab at all angles zero;
-        by default the two lab axes after the beam in cyclic order (for psic,
-        beam y: width along z, height along x).
+        by default height along the geometry's up and width across it
+        (up x beam; for psic, beam y and up x: width along z, height along x).
         """
         g = self.geometry
         b = np.asarray(g.beam)
         if face is None:
-            i = int(np.argmax(np.abs(b)))
-            face = (np.eye(3)[(i + 1) % 3], np.eye(3)[(i + 2) % 3])
+            up = g.up_direction()
+            face = (np.cross(up, b), up)
         Dm = g.detector_matrix(angles)
         centre = Dm @ b
         axes = [Dm @ unit(a) for a in face]

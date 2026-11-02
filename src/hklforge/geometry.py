@@ -8,6 +8,11 @@ floor) first:
 - the **detector** stack, whose product D turns the incoming beam direction
   into the outgoing one, k' = D k_in.
 
+The lab frame is whatever the geometry declares: the beam direction is
+required, "up" is optional (``up``), and nothing else in hklforge assumes a
+particular axis. ``Geometry.reframed`` expresses the same instrument in
+another lab frame, e.g. psic (beam y, up x) in a beam-z, up-y convention.
+
 Each circle is a right-handed rotation about a fixed lab axis given at all
 angles zero. That is the whole model; everything else (the forward map
 angles -> hkl and the generated inverse solvers) follows from it.
@@ -47,14 +52,22 @@ class Geometry:
     name: str
     sample: list[Circle]
     detector: list[Circle]
-    beam: tuple[float, float, float] = (0.0, 1.0, 0.0)
+    beam: tuple[float, float, float]      # incoming beam direction, lab frame
     description: str = ""
     labels: dict = field(default_factory=dict)   # e.g. {"x": "vertical"} for docs
+    up: tuple | None = None             # lab "up" (sets the default azimuth frame, drawings, detector face)
     azimuth_zero: tuple | None = None   # lab direction where qaz / naz = 0 (default: see azimuth_frame)
     bisect_circle: str | None = None    # the circle whose axis 'bisect' / 'omega' refer to (psic: chi)
 
     def __post_init__(self):
-        self.beam = tuple(unit(self.beam))
+        self.beam = tuple(unit(_axis(self.beam)))
+        if self.up is not None:
+            u = np.asarray(_axis(self.up), float)
+            b = np.asarray(self.beam)
+            u = u - b * (b @ u)
+            if np.linalg.norm(u) < 1e-9:
+                raise ValueError("up must not be parallel to the beam")
+            self.up = tuple(unit(u))
         names = [c.name for c in self.sample + self.detector]
         if len(set(names)) != len(names):
             raise ValueError(f"circle names must be unique, got {names}")
@@ -70,15 +83,18 @@ class Geometry:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Geometry":
+        if "beam" not in d:
+            raise ValueError("a geometry needs its beam direction, e.g. beam: y+")
         def circles(items):
             return [Circle(c["name"], tuple(unit(_axis(c["axis"])))) for c in items]
         return cls(
             name=d["name"],
             sample=circles(d["sample"]),
             detector=circles(d["detector"]),
-            beam=tuple(_axis(d.get("beam", (0, 1, 0)))),
+            beam=tuple(_axis(d["beam"])),
             description=d.get("description", ""),
             labels=d.get("labels", {}),
+            up=d.get("up"),
             azimuth_zero=d.get("azimuth_zero"),
             bisect_circle=d.get("bisect_circle"),
         )
@@ -93,7 +109,7 @@ class Geometry:
         cls,
         sample: list[str],
         detector: list[str],
-        r_i=(0, 1, 0),
+        r_i,
         sample_names: list[str] | None = None,
         detector_names: list[str] | None = None,
         name: str = "custom",
@@ -136,18 +152,77 @@ class Geometry:
     def azimuth_frame(self) -> tuple[np.ndarray, np.ndarray]:
         """(r, u): azimuths about the beam (qaz, naz) are atan2(v.u, v.r).
 
-        r is ``azimuth_zero`` or, by default, the lab axis after the beam's in
-        cyclic order (beam y -> r = z); u = beam x r (beam y -> u = x). For psic
-        that is diffcalc's qaz = atan2(Q_x, Q_z): 90 deg = vertical scattering.
+        r is ``azimuth_zero``; without it, r = up x beam, so that u = beam x r
+        is ``up`` and an azimuth of 90 deg means "up"; without ``up`` either,
+        r is the lab axis after the beam's in cyclic order (beam y -> r = z,
+        u = x). For psic that is diffcalc's qaz = atan2(Q_x, Q_z): 90 deg =
+        vertical scattering.
         """
         b = np.asarray(self.beam)
         if self.azimuth_zero is not None:
             r = np.asarray(self.azimuth_zero)
+        elif self.up is not None:
+            r = unit(np.cross(self.up, b))
         else:
             i = int(np.argmax(np.abs(b)))
             r = np.eye(3)[(i + 1) % 3]
             r = unit(r - b * (b @ r))
         return r, np.cross(b, r)
+
+    def up_direction(self) -> np.ndarray:
+        """Lab "up": ``up``, else the axis labelled vertical, else the azimuth
+        frame's u (90 deg azimuth); always perpendicular to the beam."""
+        b = np.asarray(self.beam)
+        if self.up is not None:
+            return np.asarray(self.up)
+        for axis, label in self.labels.items():
+            if str(label).lower() == "vertical":
+                u = np.eye(3)["xyz".index(axis)]
+                return unit(u - b * (b @ u))
+        return self.azimuth_frame()[1]
+
+    def frame_rotation(self, beam, up) -> np.ndarray:
+        """Rotation M taking this geometry's lab frame to one where the beam
+        is ``beam`` and up is ``up``: v_new = M @ v. Matrices transform as
+        M @ A (UB, U) or M @ A @ M.T (lab-frame operators)."""
+        b0, u0 = np.asarray(self.beam), self.up_direction()
+        b1 = unit(_axis(beam))
+        u1 = np.asarray(_axis(up), float)
+        u1 = u1 - b1 * (b1 @ u1)
+        if np.linalg.norm(u1) < 1e-9:
+            raise ValueError("up must not be parallel to the beam")
+        u1 = unit(u1)
+        S = np.column_stack([b0, u0, np.cross(b0, u0)])
+        T = np.column_stack([b1, u1, np.cross(b1, u1)])
+        return T @ S.T
+
+    def reframed(self, beam, up, name: str | None = None, labels: dict | None = None) -> "Geometry":
+        """The same instrument with its lab frame chosen so that the beam is
+        ``beam`` and up is ``up`` (axis strings or vectors). Every angle,
+        virtual angle and solution is unchanged; lab and phi-frame vectors
+        turn by ``frame_rotation(beam, up)`` (so UB becomes M @ UB).
+        ``labels`` default to the old ones carried along where an axis maps
+        onto an axis."""
+        M = self.frame_rotation(beam, up)
+        turn = lambda v: tuple(float(x) + 0.0 for x in np.round(M @ np.asarray(v, float), 15))
+        if labels is None:
+            labels = {}
+            for axis, label in self.labels.items():
+                v = M @ np.eye(3)["xyz".index(axis)]
+                i = int(np.argmax(np.abs(v)))
+                if np.isclose(abs(v[i]), 1.0):
+                    labels["xyz"[i]] = label
+        return Geometry(
+            name=name or self.name,
+            sample=[Circle(c.name, turn(c.axis)) for c in self.sample],
+            detector=[Circle(c.name, turn(c.axis)) for c in self.detector],
+            beam=turn(self.beam),
+            description=self.description,
+            labels=labels,
+            up=turn(self.up_direction()),
+            azimuth_zero=None if self.azimuth_zero is None else turn(self.azimuth_zero),
+            bisect_circle=self.bisect_circle,
+        )
 
     def circle(self, name: str) -> Circle:
         for c in self.sample + self.detector:
@@ -158,7 +233,8 @@ class Geometry:
     def __repr__(self):
         s = ", ".join(f"{c.name}{_axis_str(c.axis)}" for c in self.sample)
         d = ", ".join(f"{c.name}{_axis_str(c.axis)}" for c in self.detector)
-        return f"Geometry({self.name!r}: sample [{s}] | detector [{d}] | beam {_axis_str(self.beam)})"
+        up = "" if self.up is None else f" | up {_axis_str(self.up)}"
+        return f"Geometry({self.name!r}: sample [{s}] | detector [{d}] | beam {_axis_str(self.beam)}{up})"
 
     # --- forward model ------------------------------------------------------
 
