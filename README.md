@@ -40,7 +40,24 @@ from hklforge.draw import draw                              # 3D drawing (matplo
 draw(d, angles, show=("ttheta", "psi"))
 ```
 
-Tests (`pytest`) compare against diffcalc-core and xrayutilities.
+For planning (numpy only at import; pandas for tables, xraydb for |F|):
+
+```python
+from hklforge.crystal.spacegroups import SpaceGroup
+from hklforge.crystal.structure import read_cif
+from hklforge.crystal import reflections
+SpaceGroup("P63/mmc").why_forbidden((0, 0, 1))   # 'forbidden in P 63/m m c by the 6₃ screw axis along [0 0 1]'
+st = read_cif("Bi2Se3.cif")
+st.structure_factor((0, 0, 3), energy=9000)      # |F| with f0, f' + i f'' and Debye-Waller
+reflections.reflection_list(st.cell, 9000, structure=st, d_min=1.5)   # allowed, why not, mult, |F|, I rel
+reflections.rotation_groups(hkls, ub, axis)      # reflections a turn about an axis maps onto each other
+
+from hklforge.orient import u_from_two           # U from two (hkl, direction) pairs, Busing & Levy
+psic.detector_towards(k_out_lab, near=angles)    # detector circles pointing along a beam
+```
+
+Tests (`pytest`) compare against diffcalc-core and xrayutilities, the crystallography against gemmi
+(every space-group setting, structure factors).
 
 ## License
 

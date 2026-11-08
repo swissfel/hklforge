@@ -29,7 +29,7 @@ from diffcalc.hkl.constraints import Constraints
 from diffcalc.hkl.geometry import Position
 from diffcalc.ub.calc import UBCalculation
 
-from bernina_prep.diffraction import en2lam, k_magnitude
+from escape.bernina.geometry import en2lam, k_magnitude
 
 SAMPLE_CIRCLES = ("mu", "eta", "chi", "phi")
 TDET_LIMITS = (10.0, 5000.0)   # mm, the 3D view's tdet input range

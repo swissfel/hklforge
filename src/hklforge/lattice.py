@@ -31,3 +31,11 @@ def b_matrix(a: float, b: float, c: float, alpha: float = 90.0, beta: float = 90
 
 def d_spacing(b: np.ndarray, hkl) -> float:
     return 2 * np.pi / np.linalg.norm(b @ np.asarray(hkl, float))
+
+
+def angle_between(ub: np.ndarray, h1, h2) -> float:
+    """Angle between the scattering vectors of two reflections [deg]
+    (any B or UB, the angle is the same)."""
+    q1, q2 = (np.asarray(ub, float) @ np.asarray(h, float) for h in (h1, h2))
+    c = q1 @ q2 / (np.linalg.norm(q1) * np.linalg.norm(q2))
+    return float(np.degrees(np.arccos(np.clip(c, -1.0, 1.0))))

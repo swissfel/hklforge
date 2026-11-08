@@ -1,0 +1,43 @@
+# rutile with its symmetry operations listed and anisotropic U for O
+data_rutile
+_cell_length_a    4.5937
+_cell_length_b    4.5937
+_cell_length_c    2.9587
+_cell_angle_alpha 90
+_cell_angle_beta  90
+_cell_angle_gamma 90
+_symmetry_space_group_name_H-M 'P 42/m n m'
+loop_
+_symmetry_equiv_pos_as_xyz
+'x, y, z'
+'-x, -y, z'
+'1/2-y, 1/2+x, 1/2+z'
+'1/2+y, 1/2-x, 1/2+z'
+'1/2-x, 1/2+y, 1/2-z'
+'1/2+x, 1/2-y, 1/2-z'
+'y, x, -z'
+'-y, -x, -z'
+'-x, -y, -z'
+'x, y, -z'
+'1/2+y, 1/2-x, 1/2-z'
+'1/2-y, 1/2+x, 1/2-z'
+'1/2+x, 1/2-y, 1/2+z'
+'1/2-x, 1/2+y, 1/2+z'
+'-y, -x, z'
+'y, x, z'
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_B_iso_or_equiv
+Ti1 Ti4+ 0 0 0 1 0.42
+O1 O2- 0.3048(1) 0.3048(1) 0 1.0 .
+loop_
+_atom_site_aniso_label
+_atom_site_aniso_U_11
+_atom_site_aniso_U_22
+_atom_site_aniso_U_33
+O1 0.0070 0.0070 0.0050

@@ -32,7 +32,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from .rotation import rot, unit
+from .rotation import rot, sp2, unit
 
 # hc in eV * angstrom, same value (CODATA 2018) as scipy.constants
 HC_EV_ANGSTROM = 12398.419843320026
@@ -263,6 +263,25 @@ class Geometry:
     def q_phi(self, angles: dict, k: float) -> np.ndarray:
         """Q in the sample (phi) frame."""
         return self.sample_matrix(angles).T @ self.q_lab(angles, k)
+
+
+    def detector_towards(self, kout, near: dict | None = None) -> dict:
+        """The detector circles that point the detector along ``kout`` (lab
+        frame, any length), for a two-circle detector. Of the (at most two)
+        settings, the one closest to ``near``'s detector circles (default 0).
+        Used to put the detector on a second reflection: kout = k_in + Q."""
+        if len(self.detector) != 2:
+            raise ValueError("detector_towards needs a detector of two circles")
+        kout = np.asarray(kout, float) / np.linalg.norm(kout)
+        axes = [np.asarray(c.axis, float) for c in self.detector]
+        settings = sp2(axes[0], axes[1], unit(self.beam), kout)
+        if not settings:
+            raise ValueError("no detector setting points along this direction")
+        near = near or {}
+        wrap = lambda a: (a + 180.0) % 360.0 - 180.0                         # noqa: E731
+        best = min(([wrap(np.degrees(t)) for t in ts] for ts in settings),
+                   key=lambda d: sum(abs(wrap(x - near.get(c.name, 0.0))) for x, c in zip(d, self.detector)))
+        return {c.name: float(x) for x, c in zip(best, self.detector)}
 
 
 def wavevector(energy_eV: float) -> float:

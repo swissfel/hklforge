@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hklforge"
-version = "0.0.1"
-description = "Diffractometer angle solvers generated exactly from a declared geometry"
+version = "0.1.0"
+description = "Diffractometer angle solvers generated exactly from a declared geometry, with crystallography for planning"
 requires-python = ">=3.10"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
@@ -26,8 +26,10 @@ Documentation = "https://github.com/swissfel/hklforge/tree/main/docs"
 
 [project.optional-dependencies]
 draw = ["matplotlib"]
+# hklforge.crystal: reflection tables (pandas), form factors and anomalous terms (xraydb)
+crystal = ["pandas", "xraydb"]
 # reference implementations the tests compare against
-test = ["pytest", "scipy", "diffcalc-core", "xrayutilities", "matplotlib", "pandas"]
+test = ["pytest", "scipy", "diffcalc-core", "xrayutilities", "matplotlib", "pandas", "xraydb", "gemmi"]
 examples = ["matplotlib", "pandas", "jupyter", "diffcalc-core", "xrayutilities"]
 
 [tool.setuptools.packages.find]
@@ -35,6 +37,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "hklforge.geometries" = ["*.yml"]
+"hklforge.crystal" = ["spacegroups.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
