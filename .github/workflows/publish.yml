@@ -1,11 +1,13 @@
 name: publish to PyPI
 
-# Push a tag like v0.0.1 (matching `version` in pyproject.toml) to release.
-# Uses PyPI trusted publishing: no token is stored; PyPI must list this
-# repository, workflow file and the environment "pypi" as a trusted publisher.
+# Push a tag vX.Y.Z to release (normally done by .githooks/pre-push when main
+# is pushed; see docs/releasing.md). The version comes from that tag via
+# setuptools-scm. Uses PyPI trusted publishing: no token is stored; PyPI lists
+# this repository, this workflow file (publish.yml) and the environment "pypi"
+# as the trusted publisher - don't rename either.
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*.*.*"]
 
 jobs:
   tests:
@@ -16,20 +18,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # setuptools-scm needs the tags
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Tag must match the package version
-        run: |
-          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "tag $GITHUB_REF_NAME does not match pyproject version $version"; exit 1
-          fi
       - name: Build sdist and wheel
         run: |
           python -m pip install build twine
           python -m build
           python -m twine check --strict dist/*
+      - name: Built version must equal the tag
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          ls dist/
+          test -f "dist/hklforge-${want}.tar.gz" || { echo "sdist is not version $want (dirty tree or tag not on this commit?)"; exit 1; }
+      - name: sdist must contain the package data and the license
+        run: |
+          tar -tzf dist/hklforge-*.tar.gz > files.txt
+          for f in LICENSE src/hklforge/crystal/spacegroups.json src/hklforge/geometries/psic.yml; do
+            grep -q "/$f\$" files.txt || { echo "missing in sdist: $f"; exit 1; }
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: dist

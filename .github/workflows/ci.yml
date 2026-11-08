@@ -8,13 +8,16 @@ on:
 
 jobs:
   test:
+    # full suite, against the reference implementations (diffcalc, xrayutilities, gemmi, ...)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12", "3.13"]
+        python-version: ["3.10", "3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # setuptools-scm derives the version from the git tags
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -22,4 +25,42 @@ jobs:
         run: python -m pip install ".[test]"
       - name: Run tests
         # test_double.py needs bernina-scripts and is skipped here
+        run: python -m pytest -q
+
+  core:
+    # only the hard dependencies, as a user (and the conda-forge package test)
+    # gets them: the oldest supported versions on the oldest Python, the newest
+    # on the newest. Reference comparisons skip; the rest must pass.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.10"
+            pins: "numpy==1.24.* pyyaml==6.0.*"
+          - python-version: "3.x"
+            pins: "numpy pyyaml"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install hard dependencies only
+        run: |
+          python -m pip install ${{ matrix.pins }} pytest
+          python -m pip install --no-deps .
+          python -m pip check
+      - name: Every module imports (except the pandas-based reflection tables)
+        run: |
+          python - <<'EOF'
+          import importlib, pkgutil, hklforge
+          optional = {"hklforge.crystal.reflections"}      # needs pandas (extra [crystal])
+          for m in pkgutil.walk_packages(hklforge.__path__, "hklforge."):
+              if m.name not in optional:
+                  importlib.import_module(m.name)
+          print("hklforge", hklforge.__version__, "imports fine")
+          EOF
+      - name: Run tests
         run: python -m pytest -q

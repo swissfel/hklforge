@@ -25,7 +25,7 @@ def test_psic_matches_diffcalc():
 
 def test_wavevector_matches_diffcalc_convention():
     # |k| = 2 pi / lambda with lambda = hc / E
-    from scipy import constants as c
+    c = pytest.importorskip("scipy.constants")
     lam = c.h * c.speed_of_light / (c.e * 12000) * 1e10
     assert np.isclose(wavevector(12000), 2 * np.pi / lam, rtol=1e-14)
 

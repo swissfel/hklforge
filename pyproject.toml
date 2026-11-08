@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "hklforge"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Diffractometer angle solvers generated exactly from a declared geometry, with crystallography for planning"
 requires-python = ">=3.10"
 license = "BSD-3-Clause"
@@ -18,7 +18,8 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Development Status :: 3 - Alpha",
 ]
-dependencies = ["numpy", "pyyaml"]
+# floors = the oldest versions the test suite was run against (Python 3.10)
+dependencies = ["numpy>=1.24", "pyyaml>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/swissfel/hklforge"
@@ -38,6 +39,9 @@ where = ["src"]
 [tool.setuptools.package-data]
 "hklforge.geometries" = ["*.yml"]
 "hklforge.crystal" = ["spacegroups.json"]
+
+[tool.setuptools_scm]
+# the version comes from the git tag: v0.1.0 -> 0.1.0 (see docs/releasing.md)
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

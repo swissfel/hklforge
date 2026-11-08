@@ -157,6 +157,7 @@ def test_naz_two_sample_circles_against_scan():
     compare with a brute-force grid scan + polish (dev/check_naz_scan.py)."""
     import os
     import sys
+    pytest.importorskip("scipy")      # check_naz_scan polishes with scipy.optimize
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dev"))
     import check_naz_scan
     tot = check_naz_scan.main(8)
