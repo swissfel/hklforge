@@ -214,9 +214,20 @@ optional code generation of a plan into readable Python, naz + bisect.
 
 Public at https://github.com/swissfel/hklforge (`main`), BSD-3-Clause,
 copyright Henrik Lemke. On PyPI as `hklforge` since 0.0.1 (2026-10-25).
-CI: `.github/workflows/ci.yml` (tests, Python 3.10/3.12/3.13; test_double
-skipped there). Release: bump `version` in pyproject.toml, commit, then the
-owner pushes a tag `vX.Y.Z` -> `publish.yml` tests, checks tag = version,
-builds and uploads via PyPI trusted publishing (environment `pypi`). Tag
-pushes need the owner's go-ahead (they publish). `.vscode/settings.json` holds the
+CI: `.github/workflows/ci.yml`: full suite on Python 3.10/3.12/3.14
+(test_double skipped there), plus a `core` job with only numpy + pyyaml
+(oldest: 3.10 / numpy 1.24 / pyyaml 6.0, and newest) that imports every module
+except `crystal.reflections` (pandas) - keep optional packages out of
+module-level imports. Releases as in escape-fel (since 2026-11-08): the version
+comes from the git tag (setuptools-scm, no version in pyproject.toml); with
+`git config core.hooksPath .githooks`, pushing `main` auto-tags the next PATCH
+and `publish.yml` tests, checks built version = tag and sdist contents, and
+uploads by trusted publishing (workflow `publish.yml`, environment `pypi` -
+don't rename). MINOR/MAJOR: tag yourself before pushing. The first release
+after v0.0.1 must be tagged `v0.1.0` by hand. Details: `docs/releasing.md`.
+conda-forge: recipe ready in `dev/conda-forge-recipe.yaml` (tested with
+rattler-build, lint clean), to be submitted to staged-recipes once 0.1.0 is on
+PyPI; the steps and escape-fel's lessons are in `docs/releasing.md`. Pushes to
+`main` and tag pushes need the owner's go-ahead (they publish). No AI
+co-author trailers in commits. `.vscode/settings.json` holds the
 owner's local editor changes - leave them out of commits.

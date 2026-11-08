@@ -6,6 +6,10 @@
 - [Modes](modes.md): how to write a mode, how many things to hold, the closed-form
   chain used for each case, double diffraction and the detector distance,
   other geometries.
+- [Crystallography and orientation](crystallography.md): space groups
+  (absences with the reason, equivalents), cells, CIF and structure factors,
+  reflection lists and groups, U from reflections, `detector_towards`; what
+  of it was checked against gemmi.
 - [Verification](verification.md): what was checked against diffcalc, libhkl,
   xrayutilities, the Bernina reference and brute-force scans, with counts;
   the diffcalc bugs found on the way.
@@ -22,3 +26,5 @@ Example notebooks (executed, outputs included) are in [`../examples`](../example
 
 Figures: `python docs/make_figures.py`. Drawing API: `hklforge.draw.draw` and
 `draw_circles` (matplotlib).
+
+Maintainers: [releasing](releasing.md) (PyPI via git tags, conda-forge).

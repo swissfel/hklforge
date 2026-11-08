@@ -101,6 +101,13 @@ which hklforge reports as a continuum. Detector on h1: 8 positions for Si
 111 + 220 at 9 keV in both libhkl double-diffraction modes, each in Bragg for
 both reflections by diffcalc's forward model.
 
+## Crystallography and orientation
+
+Space groups (every one of gemmi's 564 settings), structure factors (= gemmi
+within 0.5 %), anomalous Friedel breaking, `u_from_two` / `u_from_one` and
+`detector_towards`: see [crystallography.md](crystallography.md#what-was-verified)
+for what exactly was checked, and what was not.
+
 ## Not verified
 
 - psi for other reference conventions than diffcalc/libhkl's (there is one).

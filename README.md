@@ -8,11 +8,25 @@ Status: the geometry model, the exact sub-problems, the planner (geometry +
 mode -> all solutions) and all of diffcalc's virtual angles (psi, naz, qaz,
 alpha/beta, betain/betaout, omega/bisect, ...) exist and are tested against
 diffcalc (all 194 modes), libhkl (all 13 E6C modes), xrayutilities and the
-Bernina two-reflection solver.
+Bernina two-reflection solver. For planning, there is crystallography
+(space-group absences with the reason, equivalents, structure factors from a
+CIF, reflection lists), tested against gemmi, and orientation helpers (U from
+reflections, pointing the detector along a beam).
 
 Documentation: [docs/](docs/README.md) - [virtual angles](docs/virtual_angles.md)
-with 3D figures, [modes](docs/modes.md), [verification](docs/verification.md).
+with 3D figures, [modes](docs/modes.md), [crystallography and orientation](docs/crystallography.md),
+[verification](docs/verification.md).
 Example notebooks: [examples/](examples/). Design notes and roadmap: `CLAUDE.md`.
+
+## Install
+
+```bash
+pip install hklforge                 # numpy + pyyaml only
+pip install "hklforge[crystal]"      # + pandas, xraydb: reflection tables, structure factors
+pip install "hklforge[draw]"         # + matplotlib: 3D drawings
+```
+
+## Use
 
 ```python
 from hklforge import Geometry
@@ -46,7 +60,7 @@ For planning (numpy only at import; pandas for tables, xraydb for |F|):
 from hklforge.crystal.spacegroups import SpaceGroup
 from hklforge.crystal.structure import read_cif
 from hklforge.crystal import reflections
-SpaceGroup("P63/mmc").why_forbidden((0, 0, 1))   # 'forbidden in P 63/m m c by the 6₃ screw axis along [0 0 1]'
+SpaceGroup("P63/mmc").why_forbidden((0, 0, 1))   # 'forbidden ... by the 6₃ screw axis along [0 0 1] and a c-glide plane ...'
 st = read_cif("Bi2Se3.cif")
 st.structure_factor((0, 0, 3), energy=9000)      # |F| with f0, f' + i f'' and Debye-Waller
 reflections.reflection_list(st.cell, 9000, structure=st, d_min=1.5)   # allowed, why not, mult, |F|, I rel
