@@ -23,6 +23,7 @@ Example notebooks (executed, outputs included) are in [`../examples`](../example
 | [03_diffcalc_comparison](../examples/03_diffcalc_comparison.ipynb) | all 194 diffcalc modes, and the diffcalc bugs demonstrated |
 | [04_double_diffraction](../examples/04_double_diffraction.ipynb) | detector on h1 vs between, tdet, against the Bernina solver |
 | [05_custom_geometries](../examples/05_custom_geometries.ipynb) | xrayutilities syntax (checked against QConversion), a kappa diffractometer |
+| [06_crystallography_planning](../examples/06_crystallography_planning.ipynb) | Bi2Se3 from CIF: absences, reflection list (vs gemmi), GaAs Friedel pairs at the Ga K edge, azimuth groups, U from two reflections, the detector onto a second reflection |
 
 Figures: `python docs/make_figures.py`. Drawing API: `hklforge.draw.draw` and
 `draw_circles` (matplotlib).

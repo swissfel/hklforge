@@ -77,7 +77,8 @@ six-circle (You 1999, as in diffcalc) and compares with diffcalc on the way.
 Further notebooks: [02 virtual angles](02_virtual_angles.ipynb),
 [03 diffcalc comparison](03_diffcalc_comparison.ipynb),
 [04 double diffraction](04_double_diffraction.ipynb),
-[05 custom geometries](05_custom_geometries.ipynb). Definitions are in
+[05 custom geometries](05_custom_geometries.ipynb),
+[06 crystallography and planning](06_crystallography_planning.ipynb). Definitions are in
 [docs/virtual_angles.md](../docs/virtual_angles.md), modes in
 [docs/modes.md](../docs/modes.md).''',
 SETUP,
@@ -536,8 +537,153 @@ except Degenerate as e:
     print("Degenerate:", e)''',
 ]
 
+# --------------------------------------------------------------------------- 06
+cryst = [
+'''md:# Planning with crystallography: Bi2Se3 from CIF to detector position
+
+Before an experiment the questions are: which reflections exist, which are
+strong, which ones are really the same reflection, how is the crystal
+oriented, and where do the circles and the detector have to go? This notebook
+answers them for Bi2Se3 (R-3m, hexagonal axes) on the psic six-circle, with
+hklforge alone. The reference comparisons (gemmi) run only if it is
+installed. Background and what was verified:
+[docs/crystallography.md](../docs/crystallography.md).
+
+Needs the extra `hklforge[crystal]` (pandas, xraydb).''',
+SETUP,
+'''from hklforge.crystal import cell, reflections
+from hklforge.crystal.spacegroups import SpaceGroup
+from hklforge.crystal.structure import read_cif
+from hklforge.lattice import angle_between
+from hklforge.orient import u_from_two
+from hklforge import wavevector''',
+'''md:## The structure
+
+`read_cif` takes a path or the CIF text. Bi2Se3 here is the structure in the
+test data (hexagonal setting).''',
+'''st = read_cif("../tests/data/Bi2Se3.cif")
+print(st.formula, "|", st.space_group.name, "|", st.cell)
+print(f"density {st.density:.3f} g/cm3, {st.z_electrons:.0f} electrons per cell")
+print("composition per cell:", st.composition())
+print("choices made while reading:", st.notes or "none")
+print("cell checks:", cell.check_cell(st.cell, st.space_group) or "consistent")''',
+'''md:## Which reflections exist, and why not
+
+R centring removes two thirds of all reflections. `why_forbidden` names the
+reason, which tells you whether an "extra" peak would mean a lower symmetry
+(a screw axis or glide that is broken) or just a wrong index.''',
+'''sg = st.space_group
+print("conditions:", sg.condition_summary())
+for h in [(0, 0, 1), (0, 0, 3), (1, 0, 0), (0, 1, 5), (1, 0, 4), (0, 0, 6)]:
+    print(h, sg.why_forbidden(h) or "allowed", "| mult", sg.multiplicity(h))''',
+'''md:## A reflection list at 9 keV
+
+One row per set of symmetry equivalents, sorted by d, with |F| (f0 + f' + i f''
+at the energy, Debye-Waller from the CIF) and the intensity relative to the
+strongest, including the multiplicity.''',
+'''E = 9000
+table = reflections.reflection_list(st.cell, E, structure=st, d_min=1.8)
+table.head(15)''',
+'''md:The strongest reflections, and what `target_check` says about candidate alignment
+reflections (a forbidden one or one that is weak despite being allowed):''',
+'''display(table.sort_values("I rel", ascending=False).head(8))
+for h in [(0, 0, 1), (0, 0, 6), (0, 1, 5), (1, 0, 4)]:
+    print(h, reflections.target_check(h, st.cell, structure=st, energy=E) or "fine as a target")''',
+'''md:### Cross-check against gemmi (if installed)
+
+The same |F| from gemmi's calculator. The form-factor tables differ
+(Waasmaier-Kirfel here, IT92 in gemmi), so expect agreement to a few 0.1 %. gemmi
+uses neutral atoms without anomalous terms, so compare without an energy.''',
+'''try:
+    import gemmi
+    small = gemmi.make_small_structure_from_block(gemmi.cif.read_file("../tests/data/Bi2Se3.cif").sole_block())
+    small.change_occupancies_to_crystallographic()
+    calc = gemmi.StructureFactorCalculatorX(small.cell)
+    hkls = [tuple(int(x) for x in r) for r in table[["h", "k", "l"]].values]
+    ref = np.array([abs(calc.calculate_sf_from_small_structure(small, list(h))) for h in hkls])
+    mine = np.abs(st.structure_factors(hkls))
+    strong = ref > 0.05 * ref.max()
+    print(f"{strong.sum()} strong reflections: max | |F| / |F_gemmi| - 1 | = {np.max(np.abs(mine[strong] / ref[strong] - 1)):.2%}")
+except ImportError:
+    print("gemmi not installed - skipped")''',
+'''md:## Anomalous scattering: when F(h) and F(-h) differ
+
+Bi2Se3 is centrosymmetric, so Friedel's law holds at any energy. GaAs is not:
+near the Ga K edge (10.367 keV), |F(1 1 1)| and |F(-1 -1 -1)| split - the
+signal used to tell the Ga and As faces apart.''',
+'''gaas = read_cif("../tests/data/GaAs.cif")
+energies = np.linspace(10000, 10800, 161)
+F = np.array([np.abs(gaas.structure_factors([(1, 1, 1), (-1, -1, -1)], energy=e)) for e in energies])
+fig, ax = plt.subplots(figsize=(6, 3.2))
+ax.plot(energies / 1e3, F[:, 0], label="|F(1 1 1)|")
+ax.plot(energies / 1e3, F[:, 1], label="|F(-1 -1 -1)|")
+ax.axvline(10.367, color="0.6", lw=0.8, ls="--")
+ax.set_xlabel("energy [keV]"); ax.set_ylabel("|F| [electrons]"); ax.legend(); ax.set_title("GaAs, across the Ga K edge")
+plt.tight_layout()''',
+'''md:## Equivalent reflections, and reflections an azimuth turn connects
+
+With the c axis along the surface normal, a rotation about the normal (an
+azimuth / phi scan) brings some reflections onto each other: same |Q|, same
+angle to the axis. `rotation_groups` finds them and the turn needed. This is
+not the same as symmetry equivalence: (0 1 5) and (1 0 -5) are equivalent but
+lie on opposite sides of the surface plane (Q_par of opposite sign).
+
+The c axis of R-3m is 3-fold, not 6-fold: of the six reflections a 60 deg
+turn connects, every second one is forbidden by the R centring, so an azimuth
+scan sees (0 1 5)-type peaks every 120 deg.''',
+'''b = b_matrix(st.cell["a"], st.cell["b"], st.cell["c"], st.cell["alpha"], st.cell["beta"], st.cell["gamma"])
+hkls = [(0, 1, 5), (1, 0, -5), (1, -1, 5), (-1, 0, 5), (0, -1, 5), (-1, 1, 5), (1, 0, 4), (0, 1, -4), (0, 0, 6)]
+rot = reflections.rotation_groups(hkls, b, b @ [0, 0, 1])
+rot.index = [reflections.fmt_hkl(h) for h in hkls]
+rot["allowed"] = [sg.is_allowed(h) for h in hkls]
+rot.join(reflections.equivalence_groups(hkls, sg).set_index(rot.index)[["family", "mult"]])''',
+'''md:## Orientation from two reflections
+
+Say the c axis was found along the surface normal (phi-frame z) and (1 0 0)
+along phi-frame x. `u_from_two` gives U (Busing & Levy: the first pair exactly,
+the second in the plane it spans with the first).''',
+'''u = u_from_two(b, (0, 0, 1), (0, 0, 1), (1, 0, 0), (1, 0, 0))
+ub = u @ b
+print(np.round(u, 6))
+print(f"angle between (0 1 5) and (0 0 6): {angle_between(ub, (0, 1, 5), (0, 0, 6)):.3f} deg")''',
+'''md:## Angles for a reflection, with the incidence held
+
+The strong (0 1 5) with the incidence angle held at 1 deg. psic has six
+circles, so three things are held: here mu = nu = 0 and betain. `describe()`
+shows how the planner solves it; every solution is returned.''',
+'''psic = Geometry.builtin("psic")
+d = Diffractometer(psic, ub, energy=E, surface_hkl=(0, 0, 1), reference_hkl=(0, 0, 1))
+m = {"mu": 0, "nu": 0, "betain": 1}
+print(d.plan(m).describe())
+sols = d.solve((0, 1, 5), m)
+pd.DataFrame([s | {k: d.pseudo(s)[k] for k in ("betain", "betaout", "ttheta")} for s in sols])''',
+'''md:## Pointing the detector at a second reflection
+
+At a sample position where a first reflection is in Bragg, a second
+reflection h2 is in Bragg too if |k_in + Q2| = |k|. `detector_towards` then
+gives the detector circles along k_out = k_in + Q2. Here hklforge's double
+diffraction mode (detector on h1) supplies such a position, and the detector
+is then moved onto h2 - checked by computing hkl back.''',
+'''k = wavevector(E)
+found = None
+for h1, h2 in [((0, 1, 5), (1, 0, 4)), ((0, 1, 5), (0, 0, 6)), ((1, 0, 4), (0, 0, 6)), ((1, 1, 0), (0, 1, 5))]:
+    pos = d.solve(h1, {"mu": 0, "nu": 0, "h2": h2})
+    if pos:
+        found = h1, h2, pos[0]
+        break
+h1, h2, angles = found
+q2 = psic.sample_matrix(angles) @ ub @ np.array(h2, float)
+k_out = k * np.asarray(psic.beam) + q2
+det = psic.detector_towards(k_out, near=angles)
+print("sample position, detector on", h1, {n: round(v, 3) for n, v in angles.items()})
+print(f"|k_in + Q2| / |k| = {np.linalg.norm(k_out) / k:.9f}   (1: h2 is in Bragg as well)")
+print("detector moved onto", h2, {n: round(v, 3) for n, v in det.items()})
+print("hkl at the new detector position:", np.round(d.hkl({**angles, **det}), 9))''',
+'''draw(d, {**angles, **det}, show=("ttheta",));''',
+]
+
 for name, cells in (("01_quickstart", quick), ("02_virtual_angles", virt),
                     ("03_diffcalc_comparison", cmp_), ("04_double_diffraction", dd),
-                    ("05_custom_geometries", custom)):
+                    ("05_custom_geometries", custom), ("06_crystallography_planning", cryst)):
     nbf.write(nb(cells), os.path.join(OUT, f"{name}.ipynb"))
     print("wrote", name)
