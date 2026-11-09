@@ -61,8 +61,10 @@ Keep it that way:
 
 ## conda-forge
 
-hklforge is not on conda-forge yet. The recipe for the submission is
-[`dev/conda-forge-recipe.yaml`](../dev/conda-forge-recipe.yaml) (v1 format).
+hklforge 0.1.0 was submitted to conda-forge on 2026-11-09:
+[staged-recipes PR #35560](https://github.com/conda-forge/staged-recipes/pull/35560).
+The submitted recipe is in [`dev/conda-forge/`](../dev/conda-forge/) (v1 format,
+with `run_test.py`, the solver smoke test).
 It was built and tested locally with `rattler-build` and passes
 `conda-smithy recipe-lint`. The test runs on Python 3.11 (conda-forge's
 `python_min`) and 3.15, with `pip check`.
@@ -81,7 +83,7 @@ After the PR is merged, the recipe lives in `conda-forge/hklforge-feedstock`:
 
 - Enable the bot's automerge with `bot: automerge: true` in its
   `conda-forge.yml`, via a PR from a fork.
-- Delete `dev/conda-forge-recipe.yaml` here, so no stale copy remains.
+- Delete `dev/conda-forge/` here, so no stale copy remains.
 
 From then on, each PyPI release produces a bot PR on the feedstock, which
 merges itself when green. The bot does **not** update dependencies. A change
@@ -100,3 +102,4 @@ Lessons from escape-fel's submission, already applied to this recipe:
 | `pip_check: false` without a reason | pip check on (default) |
 | old meta.yaml format | v1 `recipe.yaml` |
 | no "ready for review" comment, overlooked inline comments | steps 3 and 4 |
+| (new with hklforge) a bash heredoc in a test script fails on Windows (cmd.exe) | test scripts are plain `python file.py` commands |

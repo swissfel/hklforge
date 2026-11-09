@@ -225,7 +225,7 @@ and `publish.yml` tests, checks built version = tag and sdist contents, and
 uploads by trusted publishing (workflow `publish.yml`, environment `pypi` -
 don't rename). MINOR/MAJOR: tag yourself before pushing. The first release
 after v0.0.1 must be tagged `v0.1.0` by hand. Details: `docs/releasing.md`.
-conda-forge: recipe ready in `dev/conda-forge-recipe.yaml` (tested with
+conda-forge: submitted 2026-11-09, staged-recipes PR #35560; recipe copy in `dev/conda-forge/` (tested with
 rattler-build, lint clean), to be submitted to staged-recipes once 0.1.0 is on
 PyPI; the steps and escape-fel's lessons are in `docs/releasing.md`. Pushes to
 `main` and tag pushes need the owner's go-ahead (they publish). No AI

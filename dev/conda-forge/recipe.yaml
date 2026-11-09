@@ -1,5 +1,5 @@
-# conda-forge recipe for the staged-recipes submission (see docs/releasing.md).
-# Delete this file once conda-forge/hklforge-feedstock exists.
+# Submitted to conda-forge/staged-recipes as PR #35560 (see docs/releasing.md).
+# Delete this folder once conda-forge/hklforge-feedstock exists.
 schema_version: 1
 
 context:
@@ -12,7 +12,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/${{ name }}-${{ version }}.tar.gz
-  sha256: SHA256_OF_THE_PYPI_SDIST
+  sha256: 24b34b287d8ff04f0d9939ff25874685088ff9c3531966a419a55f44bf7fc49f
 
 build:
   number: 0
@@ -42,18 +42,12 @@ tests:
   - requirements:
       run:
         - python ${{ python_min }}.*
+    files:
+      recipe:
+        - run_test.py
     script:
       - python -c "import hklforge; print(hklforge.__version__)"
-      - |
-        python - <<'PY'
-        from hklforge import Diffractometer, Geometry
-        from hklforge.lattice import b_matrix
-        d = Diffractometer(Geometry.builtin("psic"), b_matrix(5.431, 5.431, 5.431),
-                           energy=9000, surface_hkl=(0, 0, 1), reference_hkl=(0, 0, 1))
-        s = d.solve((1, 1, 2), {"eta": 0, "chi": 0, "phi": 0})
-        assert len(s) > 0, s
-        print(len(s), "solutions")
-        PY
+      - python run_test.py
 
 about:
   homepage: https://github.com/swissfel/hklforge
