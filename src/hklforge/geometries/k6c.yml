@@ -1,0 +1,18 @@
+name: k6c
+description: |
+  Kappa six-circle: libhkl's K6C, with its axes and names - the kappa
+  version of psic/E6C (mu and gamma about the vertical, komega, kphi and
+  delta about -y, kappa tilted by 50 deg from -y towards -z).
+  Lab frame as libhkl: x along the beam, z up.
+  Forward model checked against libhkl (dev/reference/compare_libhkl_builtins.py).
+labels: {x: beam, y: transverse, z: vertical}
+beam: x+
+up: z+
+sample:
+  - {name: mu,     axis: z+}
+  - {name: komega, axis: y-}
+  - {name: kappa,  axis: [0.0, -0.6427876096865394, -0.766044443118978]}
+  - {name: kphi,   axis: y-}
+detector:
+  - {name: gamma,  axis: z+}
+  - {name: delta,  axis: y-}

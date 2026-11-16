@@ -10,6 +10,9 @@
   (absences with the reason, equivalents), cells, CIF and structure factors,
   reflection lists and groups, U from reflections, `detector_towards`; what
   of it was checked against gemmi.
+- [3D view, geometry explorer, stored geometries](viewer.md): the interactive
+  three.js view of any geometry (virtual angles, Brillouin-zone points), the
+  step-by-step geometry explorer, and the libhkl geometries with their check.
 - [Verification](verification.md): what was checked against diffcalc, libhkl,
   xrayutilities, the Bernina reference and brute-force scans, with counts;
   the diffcalc bugs found on the way.

@@ -1,0 +1,17 @@
+name: k4cv
+description: |
+  Kappa four-circle, vertical scattering plane: libhkl's K4CV, with its
+  axes and names. At all angles 0 the kappa axis is tilted by 50 deg from
+  the komega axis (-y) towards the vertical (-z); kphi is parallel to
+  komega when kappa = 0. A kappa reaches an Eulerian chi of at most
+  +-100 deg (2 x 50). Lab frame as libhkl: x along the beam, z up.
+  Forward model checked against libhkl (dev/reference/compare_libhkl_builtins.py).
+labels: {x: beam, y: transverse, z: vertical}
+beam: x+
+up: z+
+sample:
+  - {name: komega, axis: y-}
+  - {name: kappa,  axis: [0.0, -0.6427876096865394, -0.766044443118978]}
+  - {name: kphi,   axis: y-}
+detector:
+  - {name: tth,    axis: y-}

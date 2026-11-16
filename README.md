@@ -15,7 +15,7 @@ reflections, pointing the detector along a beam).
 
 Documentation: [docs/](docs/README.md) - [virtual angles](docs/virtual_angles.md)
 with 3D figures, [modes](docs/modes.md), [crystallography and orientation](docs/crystallography.md),
-[verification](docs/verification.md).
+[verification](docs/verification.md), [3D view, geometry explorer, stored geometries](docs/viewer.md).
 Example notebooks: [examples/](examples/). Design notes and roadmap: `CLAUDE.md`.
 
 ## Install
@@ -24,6 +24,7 @@ Example notebooks: [examples/](examples/). Design notes and roadmap: `CLAUDE.md`
 pip install hklforge                 # numpy + pyyaml only
 pip install "hklforge[crystal]"      # + pandas, xraydb: reflection tables, structure factors
 pip install "hklforge[draw]"         # + matplotlib: 3D drawings
+pip install "hklforge[app]"          # + ipywidgets: the geometry explorer in a notebook
 ```
 
 ## Use
@@ -52,6 +53,13 @@ d.pseudo(angles)                                            # all virtual angles
 
 from hklforge.draw import draw                              # 3D drawing (matplotlib)
 draw(d, angles, show=("ttheta", "psi"))
+
+Geometry.builtins()             # psic, fourcv, e4ch, k4cv, k6c (libhkl's names and frames)
+from hklforge.view import page, message                     # interactive three.js view, any geometry
+open("k6c.html", "w").write(page(Geometry.builtin("k6c")))
+from hklforge.view.explorer import GeometryExplorer         # how a geometry is built, step by step
+GeometryExplorer().widget
+d.scan((1, 1, 2), {"mu": 0, "nu": 0, "phi": 0}, "phi", range(-180, 181, 5))   # solutions vs a held value
 ```
 
 For planning (numpy only at import; pandas for tables, xraydb for |F|):
@@ -68,6 +76,8 @@ reflections.rotation_groups(hkls, ub, axis)      # reflections a turn about an a
 
 from hklforge.orient import u_from_two           # U from two (hkl, direction) pairs, Busing & Levy
 psic.detector_towards(k_out_lab, near=angles)    # detector circles pointing along a beam
+from hklforge.crystal.bz import special_points   # Γ, X, L, ... and the standard paths, in hkl
+special_points(st.cell, "R-3m")
 ```
 
 Tests (`pytest`) compare against diffcalc-core and xrayutilities, the crystallography against gemmi

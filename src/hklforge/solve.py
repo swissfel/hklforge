@@ -520,6 +520,32 @@ class Diffractometer:
     def solve(self, hkl, mode: dict, detector: str = "h1") -> list[dict]:
         return self.plan(mode, detector).run(self.ub, self.k, hkl, self.surface, self.reference)
 
+    def scan(self, hkl, mode: dict, name: str, values, detector: str = "h1", keep=None) -> list[dict]:
+        """Solve ``hkl`` with ``mode[name]`` stepped through ``values``.
+
+        For planning: how many positions exist while one held value (a
+        circle or a virtual angle) changes. Returns one dict per value:
+        ``{"value", "solutions", "error"}``; ``keep(position) -> bool``
+        drops positions (e.g. outside motor limits) before they are
+        counted. A value where the mode has no finite answer (``Degenerate``,
+        a continuum) or is rejected (``ModeError``) gives no solutions and
+        the reason in ``error`` instead of raising.
+        """
+        if name not in mode:
+            raise ValueError(f"{name!r} is not held in the mode {sorted(mode)}")
+        out = []
+        for v in values:
+            m = {**mode, name: float(v)}
+            try:
+                sols = plan(self.geometry, m, detector).run(self.ub, self.k, hkl, self.surface, self.reference)
+                err = None
+            except (Degenerate, ModeError) as exc:
+                sols, err = [], f"{type(exc).__name__}: {exc}"
+            if keep is not None:
+                sols = [s for s in sols if keep(s)]
+            out.append({"value": float(v), "solutions": sols, "error": err})
+        return out
+
     def hkl(self, angles: dict) -> np.ndarray:
         return np.linalg.solve(self.ub, self.geometry.q_phi(angles, self.k))
 

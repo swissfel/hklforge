@@ -135,6 +135,22 @@ class Geometry:
     def builtin(cls, name: str) -> "Geometry":
         return cls.from_yaml(resources.files("hklforge.geometries").joinpath(f"{name}.yml").read_text())
 
+    @staticmethod
+    def builtins() -> list[str]:
+        """Names of the stored geometries (``Geometry.builtin(name)``)."""
+        return sorted(f.name[:-4] for f in resources.files("hklforge.geometries").iterdir()
+                      if f.name.endswith(".yml"))
+
+    def to_dict(self) -> dict:
+        """Plain data (lists, floats): ``Geometry.from_dict(g.to_dict())`` gives ``g`` back.
+        Also what the 3D viewer is sent (``hklforge.view``)."""
+        vec = lambda v: None if v is None else [float(x) + 0.0 for x in v]     # noqa: E731
+        return {"name": self.name, "description": self.description, "labels": dict(self.labels),
+                "beam": vec(self.beam), "up": vec(self.up), "azimuth_zero": vec(self.azimuth_zero),
+                "bisect_circle": self.bisect_circle,
+                "sample": [{"name": c.name, "axis": vec(c.axis)} for c in self.sample],
+                "detector": [{"name": c.name, "axis": vec(c.axis)} for c in self.detector]}
+
     # --- introspection ------------------------------------------------------
 
     @property

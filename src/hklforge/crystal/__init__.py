@@ -11,7 +11,10 @@
   ``xraydb``);
 - :mod:`.reflections` - reflection lists with those columns, groups of
   symmetry-equivalent reflections and of reflections a rotation about an
-  axis maps onto each other (needs ``pandas``).
+  axis maps onto each other (needs ``pandas``);
+- :mod:`.bz` - high-symmetry points of the first Brillouin zone and the
+  standard paths (Setyawan & Curtarolo) as (h, k, l) of the conventional
+  cell, each checked to lie on the zone boundary.
 
 Same conventions as the rest of hklforge: reciprocal vectors carry 2 pi,
 B is Busing & Levy's (:func:`hklforge.lattice.b_matrix`). numpy only at

@@ -36,7 +36,8 @@ jobs:
       - name: sdist must contain the package data and the license
         run: |
           tar -tzf dist/hklforge-*.tar.gz > files.txt
-          for f in LICENSE src/hklforge/crystal/spacegroups.json src/hklforge/geometries/psic.yml; do
+          for f in LICENSE src/hklforge/crystal/spacegroups.json src/hklforge/geometries/psic.yml \
+                   src/hklforge/geometries/k6c.yml src/hklforge/view/viewer.html; do
             grep -q "/$f\$" files.txt || { echo "missing in sdist: $f"; exit 1; }
           done
       - uses: actions/upload-artifact@v4

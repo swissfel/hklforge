@@ -1,0 +1,16 @@
+name: e4ch
+description: |
+  Eulerian four-circle, horizontal scattering plane: libhkl's E4CH, with
+  its axes and names. omega, phi and tth turn about the vertical, chi
+  about the beam. Lab frame as libhkl: x along the beam, z up.
+  Forward model checked against libhkl (dev/reference/compare_libhkl_builtins.py).
+labels: {x: beam, y: transverse, z: vertical}
+beam: x+
+up: z+
+bisect_circle: chi
+sample:            # outermost first
+  - {name: omega, axis: z+}
+  - {name: chi,   axis: x+}
+  - {name: phi,   axis: z+}
+detector:
+  - {name: tth,   axis: z+}

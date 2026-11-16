@@ -168,13 +168,48 @@ then executed with nbconvert (edit the generator, not the notebooks).
   reference `dev/reference/bernina_two_reflections.py` takes `en2lam`,
   `k_magnitude` from `escape.bernina.geometry` now.
 
+## 3D view, explorer, more geometries, BZ points, scan (added 2026-11-16)
+
+- `hklforge.view`: the three.js page (`view/viewer.html`, from escape's
+  Bernina page, made geometry-generic: circles built from a `Geometry`,
+  scene frame X = up, Y = beam, Z = up x beam, every lab vector turned into
+  it). `page(geometry, view_id, storage, detectors)` builds the config in at
+  `<!--HKLFORGE_VIEW_CONFIG-->`; `message(...)` / `payload_html` feed it
+  through `<span id="{view_id}-payload">` (the srcdoc-iframe trick of the
+  bernina apps). Extra over escape's page: virtual angles drawn one by one
+  with their definitions, BZ special points/paths, circle axes, `focus`,
+  a `download` counter that clicks `#{id}-config-download` in the parent.
+  The psic default inside the HTML is checked against Python
+  (`tests/test_view.py`). Verified in Chrome: `dev/check_viewer.py`
+  (hkl to 3e-15, virtual angles to 3e-13 deg, six geometries).
+- `hklforge.view.explorer.GeometryExplorer` (ipywidgets, extra `[app]`):
+  step-by-step build of a geometry in the view; `geometry_yaml(g)`.
+- `Geometry.builtins()`, `Geometry.to_dict()`; stored `e4ch`, `k4cv`, `k6c` in
+  libhkl's frame and names, forward model = libhkl to 3e-6
+  (`dev/reference/compare_libhkl_builtins.py`, libhkl env as above).
+  libhkl ZAXIS / SIXS MED turn the detector with `mu` too (a circle in both
+  stacks): not expressible yet, so not stored. Note: example 05's kappa
+  tilts its axis towards the beam; libhkl's K4CV tilts it towards the
+  vertical (both are kappas; the notebook's "as libhkl's K4CV" is off).
+- `hklforge.crystal.bz`: `bravais_lattice`, `special_points` (Setyawan &
+  Curtarolo 2010, as hkl of the conventional cell; CUB FCC BCC TET BCT1/2
+  ORC HEX RHL1/2; others Γ only), every point checked to lie on the zone
+  boundary at runtime (`boundary_nodes`); the brief's BCT1 table was wrong
+  and this check caught it.
+- `Diffractometer.scan(hkl, mode, name, values, keep=)`: solutions while one
+  held value steps (bernina-scripts' angles tab plots the counts).
+- Order agreed with the owner: hklforge first, then bernina-scripts uses it,
+  production test on mybinder, only then escape and eco move to this view.
+  escape/eco must keep working with each hklforge release meanwhile: changes
+  here stay additive.
+
 ## Next
 
 Kappa <-> Euler conversion modes (a kappa *geometry* already works, see
 examples/05), axis limits and preferred-branch selection, UB from reflections
-(Busing-Levy) and refinement, an interactive (three.js) version of the 3D
-help building on escape's `escape/bernina/diffractometer_3d.html`,
-optional code generation of a plan into readable Python, naz + bisect.
+(Busing-Levy) and refinement, a circle shared by both stacks (z-axis
+geometries), escape and eco using `hklforge.view` (after the production
+test), optional code generation of a plan into readable Python, naz + bisect.
 
 ## Verification standard (keep it)
 

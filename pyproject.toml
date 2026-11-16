@@ -27,6 +27,8 @@ Documentation = "https://github.com/swissfel/hklforge/tree/main/docs"
 
 [project.optional-dependencies]
 draw = ["matplotlib"]
+# hklforge.view.explorer: the geometry explorer widget (the 3D page itself needs nothing)
+app = ["ipywidgets>=8"]
 # hklforge.crystal: reflection tables (pandas), form factors and anomalous terms (xraydb)
 crystal = ["pandas", "xraydb"]
 # reference implementations the tests compare against
@@ -39,6 +41,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "hklforge.geometries" = ["*.yml"]
 "hklforge.crystal" = ["spacegroups.json"]
+"hklforge.view" = ["viewer.html"]
 
 [tool.setuptools_scm]
 # the version comes from the git tag: v0.1.0 -> 0.1.0 (see docs/releasing.md)

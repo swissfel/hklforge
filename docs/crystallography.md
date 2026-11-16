@@ -94,6 +94,28 @@ There are two kinds of "the same reflection":
   to the axis. Turning the crystal about that axis (an azimuth scan) brings
   one onto the other. `collapse_groups` turns a table into one row per group.
 
+## Brillouin-zone points
+
+```python
+from hklforge.crystal.bz import special_points, bravais_lattice
+
+c = cell.cell_for_system("hexagonal", a=4.143, c=28.636)
+bz = special_points(c, "R-3m")        # lattice "hR", variant "RHL1"
+bz["points"]["Z"]                      # (0, 0, 1.5): (h, k, l) of the cell as given
+bz["path"]                             # [["Γ", "L", "B1"], ["B", "Z", "Γ", "X"], ...]
+```
+
+High-symmetry points and paths of Setyawan & Curtarolo (Comput. Mater. Sci.
+49, 299 (2010)), converted from their primitive reciprocal basis to (h, k, l)
+of the conventional cell (the basis of UB), so a point is drawn at
+Q = UB (node + hkl). Supported: cP, cF, cI, tP, tI (BCT1/BCT2), oP, hP and hR
+(RHL1/RHL2, hexagonal or rhombohedral axes). oS, oF, oI, mP, mS and aP return
+Γ only and a note. For oP, X, Y, Z stay along a*, b*, c* of the cell as given
+(S&C sort a < b < c first). Every point is checked before it is returned: it
+must lie on the zone boundary and meet as many nodes as in a generic cell of
+its variant (a corner stays a corner). A point that fails, e.g. K and H of a
+hexagonal cell given with gamma = 60, is dropped and the note says so.
+
 ## Orientation
 
 ```python
@@ -159,6 +181,11 @@ they run in CI:
   an orthogonal U.
 - **`detector_towards`**: for 50 random positions of psic, it gives back the
   detector circles that produced a given k_out, to 1e-7 deg.
+
+- **Brillouin-zone points** (`tests/test_bz.py`): FCC X, L, W, K, U and BCC
+  H, N, P at their known positions and lengths; for random cells of every
+  supported variant all points pass the boundary check, and each meets
+  exactly as many nodes as in the reference cell (60 cells).
 
 Not verified: `u_from_two` was not compared numerically against diffcalc
 (only the construction is the same), and the reflection-list intensities
