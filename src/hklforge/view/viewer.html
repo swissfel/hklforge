@@ -3345,7 +3345,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     const a = doc.getElementById(ID + "-config-download");
     if (!a || !a.dataset.cfg) return;
     const cfg = JSON.parse(b64ToUtf8(a.dataset.cfg));
-    cfg.display = getDisplay();
+    if (a.dataset.display !== "0") cfg.display = getDisplay();   // "0": the app left the display out
     const href = "data:application/json;base64," + utf8ToB64(JSON.stringify(cfg, null, 2));
     if (a.getAttribute("href") !== href) a.setAttribute("href", href);
   }
@@ -3408,11 +3408,14 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   function sameContent(a, b) {
     return !!a && !!b && JSON.stringify([a.state, a.display]) === JSON.stringify([b.state, b.display]);
   }
-  function addSnapshot(name, state, display, auto) {
+  // kind: what made it ("config" for a stored config file), savedText: when, in local time
+  function addSnapshot(name, state, display, auto, kind) {
     if (!state) return false;
     const list = loadSnapshots();
     const snap = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-                   name, saved: Date.now(), auto: !!auto, state, display };
+                   name, saved: Date.now(), savedText: new Date().toLocaleString(), auto: !!auto,
+                   state, display };
+    if (kind) snap.kind = String(kind);
     if (auto) {   // an automatic one only if something changed since the newest one
       const newest = list.length ? list[list.length - 1] : null;
       if (sameContent(newest, snap)) return false;
@@ -3486,7 +3489,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       doneSeq = op.seq;
       changed = true;
       if (op.op === "add") {
-        addSnapshot(op.name || ("snapshot " + new Date().toLocaleString()), op.state || lastAutosave, op.display || getDisplay(), !!op.auto);
+        addSnapshot(op.name || ("snapshot " + new Date().toLocaleString()), op.state || lastAutosave,
+                    op.display || getDisplay(), !!op.auto, op.kind);
       } else if (op.op === "delete") {
         saveSnapshots(loadSnapshots().filter((s) => s.id !== op.id));
       } else if (op.op === "clear") {

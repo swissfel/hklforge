@@ -185,9 +185,10 @@ class GeometryExplorer:
         if not keep_yaml:
             self.yaml.value = geometry_yaml(g)
         self.table.value = self._table(g)
+        stored = (f", or <code>Geometry.builtin(\"{html.escape(g.name)}\")</code>"
+                  if g.name in Geometry.builtins() else "")
         self.code.value = ("<div style='font-size:12px;color:#555'>In Python: "
-                           "<code>Geometry.from_yaml(text)</code>, or "
-                           f"<code>Geometry.builtin(\"{html.escape(g.name)}\")</code> for a stored one.</div>")
+                           f"<code>Geometry.from_yaml(text)</code>{stored}.</div>")
         self.step.max = len(self.steps) - 1
         if self.step.value == len(self.steps) - 1:
             self._show()
