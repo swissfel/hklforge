@@ -120,21 +120,19 @@
       <button id="reset-btn">Reset all to 0</button>
     </div>
 
-    <div class="section" id="virtual-section">
-      <h2>Virtual angles</h2>
-      <label class="chk"><input type="checkbox" id="show-virtual"> draw the virtual angles ticked below</label>
-      <div id="virtual-list" style="margin-left:4px"></div>
-      <div class="hint">Each angle is drawn at the sample from the vectors that define it
-        (unit length, not to the reciprocal scale): the incoming beam k, the outgoing
-        beam k&prime;, Q = k&prime; &minus; k, the reference vector n, the surface normal s,
-        and the frames they are measured in. Unfold an entry for its definition.
-        The values follow the circles live.</div>
-    </div>
-
     <div class="section">
       <h2>Display</h2>
       <label class="chk"><input type="checkbox" id="show-circles" checked> show rotation circles</label>
       <label class="chk"><input type="checkbox" id="show-axes"> circle axes and names (how the circles are stacked)</label>
+      <label class="chk"><input type="checkbox" id="show-virtual"> draw selected virtual angles</label>
+      <div id="virtual-box" style="margin-left:18px; display:none">
+        <div id="virtual-list"></div>
+        <div class="hint">Each angle is drawn at the sample from the vectors that define it
+          (unit length, not to the reciprocal scale): the incoming beam k, the outgoing
+          beam k&prime;, Q = k&prime; &minus; k, the reference vector n, the surface normal s,
+          and the frames they are measured in. Unfold an entry for its definition.
+          The values follow the circles live.</div>
+      </div>
       <label class="chk"><input type="checkbox" id="show-recip"> show reciprocal vectors (k, k&prime;, Q)</label>
       <label class="chk"><input type="checkbox" id="show-cell"> show reciprocal unit cell (a*, b*, c*)</label>
       <label class="chk"><input type="checkbox" id="show-real-cell"> show real-space unit cell (a, b, c) at the origin</label>
@@ -3208,6 +3206,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   }
 
   function refreshRecip() {
+    document.getElementById("virtual-box").style.display = showVirtualEl.checked ? "" : "none";
     const cm = parseFloat(recScaleEl.value);
     document.getElementById("rec-scale-val").textContent = cm.toFixed(1) + " cm";
     app.setRecip({
