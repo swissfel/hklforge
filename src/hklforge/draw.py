@@ -154,7 +154,7 @@ def draw(d, angles: dict, show=("ttheta",), ax=None, title=None, lab_axes=True, 
     sc.arrow(kout, COLORS["kout"], "k' (detector)" if hkls else "k'")
     sc.arrow(Qh, COLORS["Q"], "Q")
     for i, h in enumerate(hkls):
-        ki = unit(b + R @ d.ub @ np.asarray(h, float) / d.k)
+        ki = unit(b + R @ d.ub @ np.asarray(h, float) / d.k_of(angles))
         sc.arrow(ki, "#e377c2", f"k'{i + 1} {tuple(int(x) if float(x).is_integer() else x for x in h)}",
                  lw=1.5, ls="--")
     sc.plane(b, Qh, COLORS["Q"], size=1.0, alpha=0.06)            # scattering plane

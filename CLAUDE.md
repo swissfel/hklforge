@@ -203,6 +203,23 @@ then executed with nbconvert (edit the generator, not the notebooks).
   escape/eco must keep working with each hklforge release meanwhile: changes
   here stay additive.
 
+## Free energy (added 2026-11-19)
+
+`mode["energy"] = (lo, hi)` (eV, None = open) makes the energy one more
+unknown, for modes over-determined by one at a fixed energy (owner's
+request: "loosen the energy constraint to find a solution"). Positions get an
+`"energy"` key; `Diffractometer.k_of(angles)` gives their |k| and `hkl`,
+`spots`, `draw` use it. Fixed-energy modes are unchanged (no key, same
+cases). Still exact: without k, Bragg gives 1/k = -2 x.q/|q|^2 and every
+x-group constraint is linear in x (`_Context.x_planes`), so two are allowed.
+Cases `e_q/e_q_x/e_q_naz/e_axis` (detector held: k' gives 2theta, so k),
+`e_beam` (nD=2, nS = x constraints + naz; 0..3 sample circles), `e_q1`
+(nD=1, nS=1: mirror of b in Q-hat on the detector cone, degree-2 trig
+polynomial, `rotation.solve_trig_poly`). Not supported: qaz, between, nD=1
+with constraints. Verified in `tests/test_energy.py` (docs/verification.md
+"Free energy"): 880 random-geometry trials truth recovered; solutions = the
+fixed-energy planner's at their energy; e_q1 = brute-force eta scan (47/47).
+
 ## Next
 
 Kappa <-> Euler conversion modes (a kappa *geometry* already works, see

@@ -47,6 +47,7 @@ d.solve((1, 1, 1), {"mu": 0, "nu": 0, "h2": (2, 2, 0)})     # double diffraction
 d.solve((1, 1, 1), {"eta": 0, "chi": 0, "h2": (2, 2, 0)}, detector="between")
 d.solve((1, 1, 2), {"mu": 0, "nu": 0, "psi": 30})           # needs reference= / reference_hkl=
 d.solve((1, 1, 2), {"nu": 0, "bisect": True, "omega": 0})   # bisecting
+d.solve((1, 1, 3), {"mu": 0, "chi": 30, "phi": 20, "delta": 30, "energy": (5000, 20000)})  # energy free
 print(d.plan({"chi": 10, "phi": 20, "betain": 5}).describe())
 angles = d.solve((1, 1, 2), {"mu": 0, "nu": 0, "betain": 2})[0]
 d.pseudo(angles)                                            # all virtual angles of a position

@@ -90,6 +90,27 @@ naz with two sample circles (degree-8 polynomial, no diffcalc code):
 polishes every sign-change cell with scipy and compares: 33 cases, 48
 sample settings found by both, none by only one.
 
+## Free energy
+
+`tests/test_energy.py`, as above on random geometries but with a random true
+energy (4-20 keV) and the energy free in a random window around it: 40
+trials for each of the 22 free-energy variants (detector held with every
+sample case and omega; one detector + one sample circle; sample first with
+0, 1 or 2 x-group constraints, with and without naz). 880 trials, the truth
+found in every one, 2474 solutions, each re-checked through the forward
+model at its own energy (hkl to 1e-8, constraints to 1e-6 deg). Two checks
+outside the new code paths:
+
+- every sample-first and one-detector-circle solution is also returned by the
+  fixed-energy planner at that energy, with one held sample circle released
+  (more than 200 positions);
+- the degree-2 case (`e_q1`, psic with mu, chi, phi, nu held) against a scan of
+  eta on a 0.001° grid through the forward model, 1-60 keV: 48 combinations
+  of mode and hkl, the same number of solutions as sign changes in all 47
+  finite ones (26 solutions); the one continuum (eta and delta coaxial, Q
+  perpendicular to them) is reported as `Degenerate`, and the scan confirms
+  that the equation holds for every eta there.
+
 ## Double diffraction
 
 `tests/test_double.py`, against the Bernina reference

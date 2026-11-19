@@ -69,6 +69,16 @@ axis               detector first, bisect and/or omega: outer circles set   <= 1
                    e (projection or cone_points + sp2), inner two: sp2
 between            h2, detector on the bisector of k'1 and k'2: as beam_x   <= 8
 =================  ======================================================  =====
+
+**Free energy** (``mode["energy"] = (lo, hi)`` eV): one more unknown, so one
+more held circle or constraint. Bragg then only gives the energy,
+1/k = -2 x.q / |q|^2, and every x constraint becomes linear in x
+(``_Context.x_planes``), so up to two can be held. Cases: ``e_q``, ``e_q_x``,
+``e_q_naz``, ``e_axis`` (all detector circles held: k' fixes 2theta and so k,
+then the sample as without ``e_``); ``e_beam`` (nD=2, sample first: nS = x
+constraints + naz, then k, then sp2 detector); ``e_q1`` (nD=1, nS=1: k' =
+mirror image of b in Q-hat on the detector circle's cone, a degree-2
+trigonometric polynomial). Every position also carries its ``"energy"``.
 """
 from __future__ import annotations
 
@@ -78,7 +88,7 @@ import numpy as np
 
 from .geometry import Geometry, wavevector, HC_EV_ANGSTROM
 from .rotation import (Degenerate, cone_points, rot, rotation_from_pairs, solve_projection,
-                       solve_projection_pair, sp2, sp3, unit)
+                       solve_projection_pair, solve_trig_poly, sp1, sp2, sp3, unit)
 from .virtual import bisect_axis, omega_of, psi_of, virtual_angles
 
 SURFACE_CONSTRAINTS = ("betain", "betaout", "bin_eq_bout")
@@ -90,6 +100,7 @@ ALIASES = {"vomega": "omega"}   # use 'vomega' when the geometry has a circle na
 DETECTOR_POLICIES = ("h1", "between")
 
 ANGLE_TOL = 1e-6        # degrees, for merging duplicate branches
+ENERGY_TOL = 1e-6       # eV, the same for the energy of free-energy solutions
 RESIDUAL_TOL = 1e-8     # relative / radians, forward-model re-check of every solution
 
 
@@ -103,6 +114,7 @@ class Plan:
     fixed: dict                     # circle name -> degrees
     extras: dict                    # constraint name -> value
     detector: str = "h1"
+    energy: tuple | None = None     # (lo, hi) eV: the energy is free within these limits
     free_sample: list = field(init=False)
     free_detector: list = field(init=False)
     case: str = field(init=False)
@@ -138,13 +150,17 @@ class Plan:
                 raise ModeError("detector 'between' needs 2 free sample and 2 free detector circles, "
                                 f"got {nS} and {nD}")
             return "between"
-        if len(xs) > 1:
-            raise ModeError(f"{xs}: each of these fixes the beam direction seen from the sample, "
-                            "which Bragg already constrains; at most one can be used")
         if nD > 2:
             raise ModeError(f"{nD} free detector circles; at most 2 are supported")
+        if self.energy is not None:
+            return self._validate_free_energy(nS, nD, xs, naz, qaz)
+        if len(xs) > 1:
+            raise ModeError(f"{xs}: each of these fixes the beam direction seen from the sample, "
+                            "which Bragg already constrains; at most one can be used (two with "
+                            "2 free detector circles and the energy free: mode['energy'] = (lo, hi) eV)")
         if nD == 0:
-            raise ModeError("all detector circles held: that fixes |Q|, so a general hkl is unreachable")
+            raise ModeError("all detector circles held: that fixes |Q|, so a general hkl is unreachable"
+                            + self._energy_hint(False))
         if qaz and nD == 1:
             raise ModeError("qaz fixes the outgoing beam; with a detector circle held as well "
                             "that is overdetermined")
@@ -153,26 +169,35 @@ class Plan:
             if not det_first:
                 raise ModeError(f"{axis} need the scattering plane first: hold one detector circle "
                                 "or give qaz")
-            if xs or naz:
-                raise ModeError(f"{axis} together with {xs + ['naz'] * naz} is not supported")
-            if g.bisect_circle is None:
-                raise ModeError(f"geometry {g.name} declares no bisect_circle for {axis}")
-            j = g.sample_names.index(g.bisect_circle)
-            outer = [n for n in g.sample_names[:j] if n in self.free_sample]
-            inner = [n for n in g.sample_names[j:] if n in self.free_sample]
-            if len(outer) != len(axis) or len(inner) != 2:
-                raise ModeError(
-                    f"{axis} act on the {g.bisect_circle} axis, which only the circles outside it "
-                    f"({', '.join(g.sample_names[:j]) or 'none'}) move: need {len(axis)} of those "
-                    f"free (got {outer}) and 2 free from {g.sample_names[j:]} (got {inner})")
-            return "axis"
+            return self._check_axis(xs, naz)
+        how = "the detector solved first" if det_first else f"{nD} free detector circles"
+        return self._count_case(nS, xs, naz, det_first, how)
+
+    def _check_axis(self, xs, naz) -> str:
+        g, axis = self.geometry, self.axis_constraints
+        if xs or naz:
+            raise ModeError(f"{axis} together with {xs + ['naz'] * naz} is not supported")
+        if g.bisect_circle is None:
+            raise ModeError(f"geometry {g.name} declares no bisect_circle for {axis}")
+        j = g.sample_names.index(g.bisect_circle)
+        outer = [n for n in g.sample_names[:j] if n in self.free_sample]
+        inner = [n for n in g.sample_names[j:] if n in self.free_sample]
+        if len(outer) != len(axis) or len(inner) != 2:
+            raise ModeError(
+                f"{axis} act on the {g.bisect_circle} axis, which only the circles outside it "
+                f"({', '.join(g.sample_names[:j]) or 'none'}) move: need {len(axis)} of those "
+                f"free (got {outer}) and 2 free from {g.sample_names[j:]} (got {inner})")
+        return "axis"
+
+    def _count_case(self, nS, xs, naz, det_first, how) -> str:
+        """The case from counting free sample circles against constraints."""
         extra = len(xs) + naz
         need = (2 if det_first else 1) + extra
         if nS != need:
             what = "underdetermined (a continuum of positions)" if nS > need else "overdetermined"
-            raise ModeError(f"{nS} free sample circles {self.free_sample} with "
-                            f"{'the detector solved first' if det_first else f'{nD} free detector circles'}"
-                            f" and {extra} constraint(s) on the sample is {what}; need {need}")
+            raise ModeError(f"{nS} free sample circles {self.free_sample} with {how}"
+                            f" and {extra} constraint(s) on the sample is {what}; need {need}"
+                            + ("" if self.energy is not None else self._energy_hint(nS > need)))
         if det_first:
             if extra > 1:
                 raise ModeError(f"{xs + ['naz']}: with the detector solved first, {xs[0]} already "
@@ -180,6 +205,53 @@ class Plan:
             return "q_x" if xs else "q_naz" if naz else "q"
         return {(1, 0, 0): "beam", (2, 1, 0): "beam_x", (2, 0, 1): "beam_naz",
                 (3, 1, 1): "beam_x_naz"}[(nS, len(xs), int(naz))]
+
+    @staticmethod
+    def _energy_hint(under: bool) -> str:
+        return "" if under else "; or let the energy vary: mode['energy'] = (lo, hi) in eV"
+
+    def _validate_free_energy(self, nS, nD, xs, naz, qaz) -> str:
+        """Cases with the energy as one more unknown (``self.energy`` set).
+
+        Without the energy fixed, Bragg only says where the energy is; every
+        x constraint becomes linear in x = R^T b (``_Context.x_planes``).
+        """
+        axis = self.axis_constraints
+        if self.detector == "between":
+            raise ModeError("detector 'between' with a free energy is not supported")
+        if qaz:
+            raise ModeError("qaz with a free energy is not supported (hold detector circles instead)")
+        if nD == 0:                       # k' fixed: 2theta, then the energy from |q|
+            if axis:
+                return "e_" + self._check_axis(xs, naz)
+            if len(xs) > 1:
+                raise ModeError(f"{xs}: with the detector held, at most one of these can be used")
+            return "e_" + self._count_case(nS, xs, naz, True, "the detector held")
+        if axis:
+            raise ModeError(f"{axis} with a free energy need all detector circles held")
+        if nD == 1:
+            if xs or naz or nS != 1:
+                if nS == 2 + len(xs) + naz and len(xs) <= 1:
+                    raise ModeError("this mode already fixes the position at a fixed energy; a free "
+                                    "energy needs one more circle or constraint held")
+                if nS < 1 + len(xs) + naz:
+                    raise ModeError(f"{nS} free sample circles {self.free_sample} with one free detector "
+                                    f"circle and a free energy is overdetermined; need {1 + len(xs) + naz}")
+                raise ModeError(f"with one free detector circle and a free energy only one free sample "
+                                f"circle and no constraint is supported (got {self.free_sample}, "
+                                f"{xs + ['naz'] * naz})")
+            return "e_q1"
+        if len(xs) > 2:
+            raise ModeError(f"{xs}: at most two of these with a free energy")
+        need = len(xs) + naz
+        if nS != need:
+            if nS == need + 1 and len(xs) <= 1:
+                raise ModeError("this mode already fixes the position at a fixed energy; a free "
+                                "energy needs one more circle or constraint held")
+            what = "underdetermined (a continuum of positions)" if nS > need else "overdetermined"
+            raise ModeError(f"{nS} free sample circles {self.free_sample} with 2 free detector circles, "
+                            f"a free energy and {need} constraint(s) on the sample is {what}; need {need}")
+        return "e_beam"
 
     def describe(self) -> str:
         S, Dn = ", ".join(self.free_sample), ", ".join(self.free_detector)
@@ -208,20 +280,48 @@ class Plan:
             "between": ["x = R^T b from Bragg for h1 and h2: cone_points (<= 2)",
                         f"sample ({S}) from R x = b: sp2 (<= 2)",
                         f"detector ({Dn}) on the bisector of k'1 and k'2: sp2 (<= 2)"],
-        }[self.case]
+        }
+        e_det = "detector held: k' fixed, so 2theta; energy from |q| = 2k sin(theta) (one value)"
+        energy = "energy from Bragg: k = -|q|^2 / (2 x.q), kept if x.q < 0 and within the limits"
+        xs = [n for n in self.extras if n in X_CONSTRAINTS]
+        xlin = f"{' and '.join(xs)} with k eliminated through Bragg: linear in x = R^T b"
+        e_sample = {
+            (0, 0): "sample all held: R known",
+            (1, 0): f"{xlin}: one projection equation in {S} (<= 2)",
+            (2, 0): f"{xlin}: x from cone_points (<= 2); sample ({S}) from R x = b: sp2 (<= 2)",
+            (0, 1): f"naz: one projection equation in {S} (<= 2)",
+            (1, 1): f"{xlin}, and naz: two projection equations in ({S}), degree-8 polynomial (<= 8)",
+            (2, 1): f"{xlin}: x from cone_points (<= 2); R = rot(b, t) R0 with R0 x = b, naz fixes t: "
+                    f"projection (<= 2); sample ({S}): sp3 (<= 2)",
+        }
+        if self.case.startswith("e_q") and self.case != "e_q1" or self.case == "e_axis":
+            steps = [e_det] + steps[self.case[2:]][1:]
+        elif self.case == "e_beam":
+            steps = [e_sample[(len(xs), int("naz" in self.extras))], energy,
+                     f"k' = b + R q / k; detector ({Dn}): sp2 (<= 2)"]
+        elif self.case == "e_q1":
+            steps = [f"k' = b - 2 (b.Q-hat) Q-hat must lie on the cone of detector circle {Dn}: "
+                     f"degree-2 trigonometric polynomial in {S} (<= 4)", energy,
+                     f"detector ({Dn}) onto k': sp1"]
+        else:
+            steps = steps[self.case]
         held = ", ".join([f"{n}={v}" for n, v in self.fixed.items()]
                          + [f"{n}={v}" for n, v in self.extras.items()])
+        if self.energy is not None:
+            held += f", energy free in [{self.energy[0]:g}, {self.energy[1]:g}] eV"
         lines = [f"{g.name}: {held}, detector on {self.detector}  [{self.case}]"]
         lines += [f"  {i + 1}. {s}" for i, s in enumerate(steps)]
         return "\n".join(lines)
 
     # --- running it ---------------------------------------------------------
 
-    def run(self, ub, k: float, hkl, surface=None, reference=None) -> list[dict]:
+    def run(self, ub, k: float | None, hkl, surface=None, reference=None) -> list[dict]:
         """Every position (dict of degrees) putting ``hkl`` in Bragg condition.
 
         ``ub``: phi frame, 2 pi convention (q = UB h, |q| = 2 pi / d);
         ``k`` = 2 pi / lambda; ``surface`` / ``reference``: phi-frame vectors.
+        With a free energy (``self.energy``) ``k`` is not used and every
+        position also has ``"energy"`` (eV), within the limits.
         Raises ``Degenerate`` where the solutions form a continuum (e.g. two
         free circles about the same axis at these fixed values).
         """
@@ -244,6 +344,8 @@ class Plan:
         b = np.asarray(g.beam)
         q = ub @ hkl
         nq = np.linalg.norm(q)
+        if self.energy is not None:
+            return [] if nq < 1e-12 else self._run_free_energy(ub, q, s_vec, n_vec)
         if nq < 1e-12 or nq > 2 * k:
             return []
         ctx = _Context(g, self, ub, k, q, s_vec, n_vec)
@@ -264,15 +366,74 @@ class Plan:
                     kout = b + R @ q / k
                 sols += [(ts, td) for td in sp2(*D_axes, Gb, kout)]
 
+        return self._collect([(ts, td, ctx) for ts, td in sols])
+
+    def _collect(self, sols) -> list[dict]:
+        """Positions from (sample radians, detector radians, context), each
+        re-checked through the forward model, duplicates merged."""
+        g = self.geometry
         out = []
-        for ts, td in sols:
+        for ts, td, ctx in sols:
             a = dict(self.fixed)
             a.update({n: _wrap_deg(np.degrees(t)) for n, t in zip(self.free_sample, ts)})
             a.update({n: _wrap_deg(np.degrees(t)) for n, t in zip(self.free_detector, td)})
             a = {n: float(a[n]) for n in g.names}
+            if self.energy is not None:
+                a["energy"] = float(HC_EV_ANGSTROM * ctx.k / (2 * np.pi))
             if ctx.residual(a) < RESIDUAL_TOL and not any(_same(a, o) for o in out):
                 out.append(a)
         return out
+
+    def _in_window(self, k) -> bool:
+        lo, hi = self.energy
+        e = HC_EV_ANGSTROM * k / (2 * np.pi)
+        return lo - ENERGY_TOL <= e <= hi + ENERGY_TOL
+
+    def _run_free_energy(self, ub, q, s_vec, n_vec):
+        g = self.geometry
+        b = np.asarray(g.beam)
+        nq = np.linalg.norm(q)
+        S_axes, F = _chain(g.sample, self.fixed)
+        D_axes, G = _chain(g.detector, self.fixed)
+        Gb = G @ b
+        sols = []                                        # (sample, detector radians, context)
+        if self.case == "e_beam":
+            ctx0 = _Context(g, self, ub, None, q, s_vec, n_vec)
+            for ts, R in ctx0.sample_free_energy(S_axes, F):
+                xq = b @ R @ q                            # = x . q, -|q|^2 / 2k by Bragg
+                if xq >= -1e-12 * nq:
+                    continue
+                k = -nq * nq / (2 * xq)
+                if self._in_window(k):
+                    sols += [(ts, td, _Context(g, self, ub, k, q, s_vec, n_vec))
+                             for td in sp2(*D_axes, Gb, b + R @ q / k)]
+        elif self.case == "e_q1":
+            (a,), (d,) = S_axes, D_axes
+            u = F @ q / nq
+            c = d @ b - d @ Gb
+            f = lambda t: c - 2 * (b @ rot(a, t) @ u) * (d @ rot(a, t) @ u)      # noqa: E731
+            if np.linalg.norm(np.cross(a, u)) < 1e-12:    # Q on the sample circle's axis: Q fixed
+                if b @ u >= -1e-12 or abs(f(0.0)) > 1e-12:
+                    return []                             # no finite energy, or k' off the cone
+                raise Degenerate("Q lies on the free sample circle's axis, leaving a continuum")
+            for t in solve_trig_poly(f, 2):
+                Qh = rot(a, t) @ u
+                bQ = b @ Qh
+                if bQ >= -1e-12:
+                    continue
+                k = -nq / (2 * bQ)
+                if self._in_window(k):
+                    kout = b - 2 * bQ * Qh
+                    sols.append(((t,), (sp1(d, Gb, kout),), _Context(g, self, ub, k, q, s_vec, n_vec)))
+        else:                                             # detector held: k' and 2theta known
+            sin2 = (1 - b @ Gb) / 2                       # sin^2 theta
+            if sin2 < 1e-24:
+                return []
+            k = nq / (2 * np.sqrt(sin2))
+            if self._in_window(k):
+                ctx = _Context(g, self, ub, k, q, s_vec, n_vec)
+                sols = [(ts, (), ctx) for ts in ctx.sample_from_q(S_axes, F, k * (Gb - b), self.case[2:])]
+        return self._collect(sols)
 
 
 class _Context:
@@ -283,9 +444,10 @@ class _Context:
         self.s, self.n = s_vec, n_vec
         self.b = np.asarray(g.beam)
         self.nq = np.linalg.norm(q)
-        self.sin_th = self.nq / (2 * k)
-        self.cos_th = np.sqrt(max(0.0, 1 - self.sin_th ** 2))
-        self.cos2th = 1 - 2 * self.sin_th ** 2
+        if k is not None:                              # None: the energy is still unknown
+            self.sin_th = self.nq / (2 * k)
+            self.cos_th = np.sqrt(max(0.0, 1 - self.sin_th ** 2))
+            self.cos2th = 1 - 2 * self.sin_th ** 2
         ex = plan.extras
         self.q2 = ub @ np.asarray(ex["h2"], float) if "h2" in ex else None
         if "naz" in ex:
@@ -328,6 +490,85 @@ class _Context:
     def naz_ok(self, R) -> bool:
         return (R @ self.n) @ self.naz_dir > 0
 
+    # --- free energy: the x constraints with k eliminated --------------------
+
+    def x_planes(self) -> list[tuple]:
+        """Each x constraint as (w, c, side): x . w = c (w unit), and x . side > 0
+        if side is not None, with x = R^T b and 1/k = -2 x.q / |q|^2 (Bragg)."""
+        q, qq, ex = self.q, self.q @ self.q, self.plan.extras
+        out = []
+        for name in (n for n in ex if n in X_CONSTRAINTS):
+            val, side = ex[name], None
+            if name == "psi":                     # x in the half-plane of q and p (cos theta > 0)
+                qh = q / self.nq
+                n_perp = self.n - qh * (qh @ self.n)
+                if np.linalg.norm(n_perp) < 1e-12:
+                    raise Degenerate("the reference vector is parallel to Q, so psi is undefined")
+                side = rot(qh, -np.radians(val)) @ unit(n_perp)
+                w, c = np.cross(qh, side), 0.0
+            elif name == "h2":                    # x.q2 = -|q2|^2 / 2k
+                w, c = self.q2 - (self.q2 @ self.q2) / qq * q, 0.0
+            else:
+                v = self.s if name in SURFACE_CONSTRAINTS else self.n
+                if name in ("betain", "alpha"):   # x.v = -sin
+                    w, c = v, -np.sin(np.radians(val))
+                elif name in ("betaout", "beta"):  # x.v = sin - q.v / k
+                    w, c = v - 2 * (q @ v) / qq * q, np.sin(np.radians(val))
+                else:                              # x.v = -q.v / 2k
+                    w, c = v - (q @ v) / qq * q, 0.0
+            nw = np.linalg.norm(w)
+            if nw < 1e-10 * max(1.0, self.nq, 0.0 if self.q2 is None else np.linalg.norm(self.q2)):
+                if abs(c) > 1e-12:
+                    return None                    # contradictory: no x at all
+                raise Degenerate(f"{name} holds for every beam direction at this hkl")
+            out.append((w / nw, c / nw, side))
+        return out
+
+    def sample_free_energy(self, axes, F):
+        """(sample radians, R) from the x constraints and naz, the energy free."""
+        b, naz = self.b, "naz" in self.plan.extras
+        planes = self.x_planes()
+        if planes is None:
+            return
+        sides = [sd for _, _, sd in planes if sd is not None]
+
+        def ok(R):
+            x = R.T @ b
+            return all(x @ sd > 0 for sd in sides) and (not naz or self.naz_ok(R))
+
+        cands = []
+        if len(planes) == 2:
+            (w1, c1, _), (w2, c2, _) = planes
+            if abs(abs(w1 @ w2) - 1) < 1e-12:
+                if abs(c1 - np.sign(w1 @ w2) * c2) > 1e-12:
+                    return
+                raise Degenerate("the two constraints act on the same direction, leaving a continuum")
+            for x in cone_points(w1, c1, w2, c2, 1.0):
+                if not naz:
+                    cands += [((t1, t2), rot(axes[0], t1) @ rot(axes[1], t2) @ F)
+                              for t1, t2 in sp2(axes[0], axes[1], F @ x, b)]
+                    continue
+                R0 = _rotation_onto(x, b)
+                for t in solve_projection(self.naz_normal, b, R0 @ self.n, 0.0):
+                    R = rot(b, t) @ R0
+                    cands += [(ts, R) for ts in sp3(*axes, R @ F.T)]
+        elif len(planes) == 1:
+            ((w, c, _),) = planes
+            if not naz:
+                cands = [((t,), rot(axes[0], t) @ F) for t in solve_projection(b, axes[0], F @ w, c)]
+            else:
+                eqs = [(b, F @ w, c), (self.naz_normal, F @ self.n, 0.0)]
+                cands = [((t1, t2), rot(axes[0], t1) @ rot(axes[1], t2) @ F)
+                         for t1, t2 in solve_projection_pair(eqs, axes[0], axes[1])]
+        elif naz:
+            cands = [((t,), rot(axes[0], t) @ F)
+                     for t in solve_projection(self.naz_normal, axes[0], F @ self.n, 0.0)]
+        else:
+            cands = [((), F)]
+        for ts, R in cands:
+            if ok(R):
+                yield ts, R
+
     # --- sample first (detector after) --------------------------------------
 
     def sample_from_beam(self, axes, F):
@@ -369,8 +610,8 @@ class _Context:
         (d1,) = axes
         return [((s,), rot(d1, s) @ Gb) for s in solve_projection(b, d1, Gb, self.cos2th)]
 
-    def sample_from_q(self, axes, F, Q_lab):
-        q, b, case = self.q, self.b, self.plan.case
+    def sample_from_q(self, axes, F, Q_lab, case=None):
+        q, b, case = self.q, self.b, case or self.plan.case
         if case == "q":
             return sp2(axes[0], axes[1], F @ q, Q_lab)
         out = []
@@ -462,10 +703,17 @@ class _Context:
 
 
 def plan(geometry: Geometry, mode: dict, detector: str = "h1") -> Plan:
-    """Check a mode against a geometry and pick its chain of sub-problems."""
-    fixed, extras = {}, {}
+    """Check a mode against a geometry and pick its chain of sub-problems.
+
+    ``mode["energy"] = (lo, hi)`` (eV, either may be None) makes the photon
+    energy one more unknown, found within those limits: the mode then needs
+    one more held circle or constraint than at a fixed energy.
+    """
+    fixed, extras, energy = {}, {}, None
     for name, val in mode.items():
-        if name in geometry.names:
+        if name == "energy" and name not in geometry.names:
+            energy = _energy_limits(val)
+        elif name in geometry.names:
             fixed[name] = float(val)
         elif ALIASES.get(name, name) in CONSTRAINTS:
             name = ALIASES.get(name, name)
@@ -479,7 +727,19 @@ def plan(geometry: Geometry, mode: dict, detector: str = "h1") -> Plan:
         else:
             raise ModeError(f"{name!r} is neither a circle of {geometry.name} {geometry.names} "
                             f"nor a constraint {CONSTRAINTS}")
-    return Plan(geometry, fixed, extras, detector)
+    return Plan(geometry, fixed, extras, detector, energy)
+
+
+def _energy_limits(val) -> tuple:
+    try:
+        lo, hi = val
+    except (TypeError, ValueError):
+        raise ModeError(f"energy: give the limits (lo, hi) in eV within which it may vary, got {val!r}") from None
+    lo = 0.0 if lo is None else float(lo)
+    hi = np.inf if hi is None else float(hi)
+    if not 0 <= lo <= hi:
+        raise ModeError(f"energy limits ({lo:g}, {hi:g}): need 0 <= lo <= hi")
+    return (lo, hi)
 
 
 class Diffractometer:
@@ -518,6 +778,8 @@ class Diffractometer:
         return self._plans[key]
 
     def solve(self, hkl, mode: dict, detector: str = "h1") -> list[dict]:
+        """Every position for ``hkl`` in ``mode`` (see :func:`plan`); with
+        ``mode["energy"] = (lo, hi)`` each also has its ``"energy"`` in eV."""
         return self.plan(mode, detector).run(self.ub, self.k, hkl, self.surface, self.reference)
 
     def scan(self, hkl, mode: dict, name: str, values, detector: str = "h1", keep=None) -> list[dict]:
@@ -546,8 +808,13 @@ class Diffractometer:
             out.append({"value": float(v), "solutions": sols, "error": err})
         return out
 
+    def k_of(self, angles: dict) -> float:
+        """|k| of a position: its ``"energy"`` (eV) where the solver set one
+        (a free-energy mode), else the diffractometer's."""
+        return wavevector(angles["energy"]) if "energy" in angles else self.k
+
     def hkl(self, angles: dict) -> np.ndarray:
-        return np.linalg.solve(self.ub, self.geometry.q_phi(angles, self.k))
+        return np.linalg.solve(self.ub, self.geometry.q_phi(angles, self.k_of(angles)))
 
     def pseudo(self, angles: dict) -> dict:
         """All virtual angles of a position (degrees), see :mod:`hklforge.virtual`."""
@@ -574,7 +841,8 @@ class Diffractometer:
         centre = Dm @ b
         axes = [Dm @ unit(a) for a in face]
         R = g.sample_matrix(angles)
-        kouts = [unit(b + R @ self.ub @ np.asarray(h, float) / self.k) for h in hkls]
+        k = self.k_of(angles)
+        kouts = [unit(b + R @ self.ub @ np.asarray(h, float) / k) for h in hkls]
         tdet = np.inf
         for v in kouts:
             c = v @ centre

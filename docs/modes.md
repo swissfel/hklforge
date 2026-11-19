@@ -40,7 +40,9 @@ Count the free circles: nS on the sample, nD on the detector.
   the bisect circle: one free outer circle per axis constraint, and exactly two
   free circles from the bisect circle inwards.
 - nD = 0 is rejected (|Q| would be fixed), and so is anything that leaves a
-  continuum or over-determines; the `ModeError` says which and why.
+  continuum or over-determines; the `ModeError` says which and why. An
+  over-determined mode can often be solved by letting the energy vary
+  (next section).
 
 The counts in the table below are for a near-cubic crystal (a = 4 Å, 9 keV,
 (1,1,2)); a given hkl can have fewer (e.g. `{"qaz": 90, "chi": 0, "phi": 0}`
@@ -77,6 +79,69 @@ Where the solutions form a continuum (e.g. psic chi = 0 makes eta and phi the
 same axis; h2 = h1) `Degenerate` is raised with the mode in the message;
 contradictory equations on parallel vectors just give no solution.
 
+## The energy as one more unknown
+
+A mode that is over-determined by one at a fixed energy (all detector circles
+held, or one held sample circle too many) can be solved by freeing the
+photon energy within limits:
+
+```python
+# mu, chi, phi and delta held: eta and nu alone cannot reach (1,1,3) at a fixed energy
+d.solve((1, 1, 3), {"mu": 0, "chi": 30, "phi": 20, "delta": 30, "energy": (5000, 20000)})
+# [{'mu': 0.0, 'eta': 77.848, 'chi': 30.0, 'phi': 20.0, 'nu': 94.625, 'delta': 30.0, 'energy': 5176.208},
+#  {'mu': 0.0, 'eta': 37.948, 'chi': 30.0, 'phi': 20.0, 'nu': 27.765, 'delta': 30.0, 'energy': 11075.263}]
+d.solve((1, 1, 1), {"mu": 0, "eta": 10, "chi": 30, "phi": 45, "energy": (None, None)})  # crystal fixed
+d.solve((2, 2, 0), {"nu": 0, "delta": 40, "mu": 0, "chi": 10, "energy": (5000, 20000)})  # detector fixed
+d.solve((0, 0, 4), {"mu": 0, "chi": 30, "phi": 10, "h2": (2, 2, 0), "energy": (5000, 20000)})
+d.solve((1, 1, 3), {"mu": 0, "phi": 0, "betain": 2, "h2": (1, -1, 3), "energy": (5000, 20000)})
+```
+
+`mode["energy"] = (lo, hi)` in eV (either may be `None`) makes the energy a
+free unknown; each returned position then has its `"energy"` (eV), within the
+limits, and `d.hkl`, `d.spots` and `draw` use it. The diffractometer's own
+energy is not used for such a mode. Freeing the energy takes one degree of
+freedom, so the mode needs **one more** held circle or constraint than at a
+fixed energy; a mode that is already complete is refused with that message.
+Positions with the energy free are found exactly, as before:
+
+- **Detector held** (nD = 0): k' is fixed, so 2θ, and the energy follows from
+  |q| = 2k sin θ (one value). Then the sample as in `q`, `q_x`, `q_naz` or
+  `axis` (cases `e_q`, `e_q_x`, `e_q_naz`, `e_axis`).
+- **Two free detector circles** (`e_beam`, sample first): without k, Bragg
+  only says where the energy is, 1/k = −2 x·q / |q|², and every x-group
+  constraint becomes **linear** in x = Rᵀb: betaout x·(v − 2(q·v)q/|q|²) =
+  sin βout, in = out x·(v − (q·v)q/|q|²) = 0, h2 x·(q₂ − |q₂|²/|q|² q) = 0,
+  psi x·(q̂ × p) = 0 on the side x·p > 0. So up to **two** x-group constraints
+  can be held. Free sample circles = number of x-group constraints + naz:
+  0 (crystal fixed: R known), 1 (one projection), 2 with two x-group
+  constraints (`cone_points` + `sp2`), 2 with one and naz (degree-8 pair),
+  3 with two and naz (`cone_points`, naz fixes the turn about b, `sp3`). The
+  energy is then k = −|q|² / (2 x·q) (only x·q < 0 is physical), and the
+  detector turns onto k' with `sp2`.
+- **One free detector circle, one free sample circle** (`e_q1`): k' is the
+  mirror image of the beam in Q̂, k' = b − 2(b·Q̂)Q̂, and must lie on the cone
+  the single detector circle sweeps: a degree-2 trigonometric polynomial in
+  the sample circle (≤ 4 roots, `solve_trig_poly`). The detector by `sp1`.
+
+Not supported with a free energy: `qaz`, `detector="between"`, one free
+detector circle with any constraint, and bisect/omega unless all detector
+circles are held. A continuum (e.g. psic mu = nu = 0 makes eta and delta
+coaxial: with Q perpendicular to that axis every eta has its own energy)
+raises `Degenerate`.
+
+| what (psic) | mode | case | |
+|---|---|---|---|
+| one sample, one detector circle (eta, nu) | `{"mu": 0, "chi": 30, "phi": 20, "delta": 30, "energy": (lo, hi)}` | e_q1 | 2 (≤ 4) |
+| crystal fixed, detector follows (Laue-like) | `{"mu": 0, "eta": 10, "chi": 30, "phi": 45, "energy": (lo, hi)}` | e_beam | 2 |
+| detector fixed | `{"nu": 0, "delta": 40, "mu": 0, "chi": 10, "energy": (lo, hi)}` | e_q | 2 |
+| two reflections with one free sample circle | `{"mu": 0, "chi": 30, "phi": 10, "h2": (2, 2, 0), "energy": (lo, hi)}` | e_beam | 2 (≤ 4) |
+| fixed incidence and two reflections | `{"mu": 0, "phi": 0, "betain": 2, "h2": (1, -1, 3), "energy": (lo, hi)}` | e_beam | 4 (≤ 8) |
+
+Counts for Si (a = 5.431 Å), (1,1,3) / (1,1,1) / (2,2,0) / (0,0,4) / (1,1,3) as in
+the code above, 5-20 keV. In psic, eta and delta at mu = nu = 0 (and mu and
+nu always) turn about one axis, so with only those two free a general Q is
+out of reach at any energy: pick a pair on different axes, as above.
+
 ## psic examples, with diffcalc's names
 
 | what | mode | case | typical count |
@@ -92,7 +157,8 @@ contradictory equations on parallel vectors just give no solution.
 | two reflections, detector between | `{"eta": 0, "chi": 0, "h2": (2, 2, 0)}`, `detector="between"` | between | 8 |
 
 Not supported (and not in diffcalc either): naz together with bisect / omega;
-more than one x-group constraint (it would over-determine x).
+more than one x-group constraint at a fixed energy (it would over-determine x;
+with the energy free, two are fine).
 
 ## Double diffraction and the detector distance
 

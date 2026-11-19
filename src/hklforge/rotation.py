@@ -72,6 +72,31 @@ def solve_projection(w, axis, v, c: float) -> list[float]:
     return solve_trig_linear(a, b, c - g, scale=np.linalg.norm(w) * np.linalg.norm(v))
 
 
+def solve_trig_poly(f, degree: int, scale: float = 1.0) -> list[float]:
+    """All t in (-pi, pi] with f(t) = 0, for f a real trigonometric polynomial
+    of at most ``degree`` (a sum of cos(j t), sin(j t), j <= degree).
+
+    The coefficients come exactly from 4 * degree samples (FFT); with
+    z = exp(i t), z^degree f is a polynomial of degree 2 * degree whose
+    unit-circle roots are all the t.
+    """
+    n = 4 * degree
+    ts = 2 * np.pi * np.arange(n) / n
+    F = np.fft.fft([f(t) for t in ts]) / n
+    ck = {j: F[j % n] for j in range(-degree, degree + 1)}
+    big = max(abs(v) for v in ck.values())
+    if big < 1e-14 * scale:
+        raise Degenerate("equation holds for every angle")
+    poly = np.array([ck[j] for j in range(degree, -degree - 1, -1)])
+    poly = np.trim_zeros(np.where(abs(poly) < 1e-13 * big, 0, poly), "f")
+    roots = np.roots(poly) if poly.size > 1 else []
+    out = []
+    for t in (float(np.angle(z)) for z in roots if abs(abs(z) - 1) < 1e-4):
+        if not any(abs(_wrap(t - o)) < 1e-7 for o in out):     # a double root once
+            out.append(t)
+    return out
+
+
 # --- sub-problem 1: rotate p onto q about one axis --------------------------
 
 def sp1(axis, p, q) -> float:
