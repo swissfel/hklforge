@@ -59,7 +59,8 @@ cells and Brillouin zones around Q and around target reflections, and:
 - **Real-space structure (experimental)**: the atoms of the CIF
   (`message(..., structure=structure_atoms(st))`) in a block of
   n_a × n_b × n_c cells (1-6 each) centred on the sample, turning with it, on
-  their own scale ("1 Å drawn as … cm"). Atoms on a cell face, edge or corner
+  the real-space scale ("1 Å drawn as … cm", next to the reciprocal scale; the
+  real-space unit cell option uses it too). Atoms on a cell face, edge or corner
   are drawn on each. Size: by element (half the covalent radius, Cordero
   2008), all equal, or **Debye–Waller**: the 50 % probability sphere,
   radius 1.538·√(B/8π²) (atoms without B: small dots); a slider scales all.

@@ -165,13 +165,6 @@
           <input type="number" id="atoms-nb" min="1" max="6" step="1" value="1" style="width:46px"> &times;
           <input type="number" id="atoms-nc" min="1" max="6" step="1" value="1" style="width:46px">
         </div>
-        <div class="angle-row">
-          <label><span>real-space scale &mdash; 1 &Aring; drawn as</span><span id="atoms-cm-val">3 cm</span></label>
-          <div class="row-controls">
-            <input type="range" id="atoms-cm" min="0.2" max="20" step="0.1" value="3" style="flex:1">
-            <input type="number" id="atoms-cm-num" min="0.05" max="50" step="any" value="3">
-          </div>
-        </div>
         <div class="row-controls" style="font-size:12px;margin-top:4px;">size
           <select id="atoms-size">
             <option value="element">by element (half the covalent radius)</option>
@@ -189,7 +182,7 @@
         <label class="chk"><input type="checkbox" id="show-poly"> coordination polyhedra around
           <select id="poly-centre"></select></label>
         <div class="hint">The atoms of the CIF in the real-space cell (the block of cells centred on
-          the sample, on their own scale above, turning with it), repeated over the cells chosen;
+          the sample, on the real-space scale, turning with it), repeated over the cells chosen;
           atoms on a cell face, edge or corner are drawn on every one of them.
           Debye&ndash;Waller size: radius 1.538&middot;&radic;(B/8&pi;&sup2;), the sphere the atom is
           in half the time (atoms without B: small dots). Polyhedra join the neighbours
@@ -252,6 +245,13 @@
         <div class="row-controls">
           <input type="range" id="rec-scale" min="1" max="50" step="0.5" value="5" style="flex:1">
           <input type="number" id="rec-scale-num" min="1" max="50" step="0.5" value="5">
+        </div>
+      </div>
+      <div class="angle-row" style="margin-top:8px;">
+        <label><span>real-space scale &mdash; 1 &Aring; drawn as</span><span id="atoms-cm-val">3 cm</span></label>
+        <div class="row-controls">
+          <input type="range" id="atoms-cm" min="0.2" max="20" step="0.1" value="3" style="flex:1">
+          <input type="number" id="atoms-cm-num" min="0.05" max="50" step="any" value="3">
         </div>
       </div>
       <div class="hint">
@@ -2128,10 +2128,10 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     }
 
     // --- real space (experimental): the atoms of msg.structure, or the
-    //     lattice points, in the real-space cell at the origin (phi frame,
-    //     drawn at 1/(2 pi) of the reciprocal scale: s / (2 pi) scene units
-    //     per angstrom), repeated over recipState.atomsN cells ----------------
-    let lastAtoms = null;
+    //     lattice points, in the real-space cell (phi frame, on the
+    //     real-space scale atomsCmPerA, like the real-space unit cell),
+    //     repeated over recipState.atomsN cells ------------------------------
+    let lastAtoms = null, lastRealCellCm = null;
     const CENTRING_POINTS = {
       P: [[0, 0, 0]], I: [[0, 0, 0], [0.5, 0.5, 0.5]],
       F: [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]],
@@ -2286,7 +2286,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
           vertexCounts.push(P.length);
         }
       }
-      lastAtoms = { counts, polyhedra: polys, vertices: vertexCounts, latticePoints: !st,
+      lastAtoms = { cellCm: R[0].length() / (10 * SCENE_MM_SCALE), counts, polyhedra: polys, vertices: vertexCounts, latticePoints: !st,
                     radii: Object.fromEntries([...byEl.keys()].map((el) => [el, radius(el, byEl.get(el)[0][2]) / perA])) };
     }
 
@@ -2529,17 +2529,17 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
           }
         }
 
-        // The real-space cell at the origin, turning with the sample. Drawn
-        // at 1/(2 pi) of the reciprocal scale (1 A shown as long as
-        // 1/(2 pi) 1/A), so it follows the scale slider: a = 2 pi (b* x c*) / V*.
+        // The real-space cell at the origin, turning with the sample, on the
+        // real-space scale (atomsCmPerA, as the atoms): a = 2 pi (b* x c*) / V*.
         if (recipState.showRealCell) {
           const bc = new THREE.Vector3().crossVectors(B, C);
           const vol = A.dot(bc);
           if (Math.abs(vol) > 1e-12) {
-            const k = s * s / vol;
+            const k = s * s / vol * (recipState.atomsCmPerA * 10 * SCENE_MM_SCALE) / (s / (2 * Math.PI));
             const real = [bc.multiplyScalar(k), new THREE.Vector3().crossVectors(C, A).multiplyScalar(k),
                           new THREE.Vector3().crossVectors(A, B).multiplyScalar(k)];
             const css = ["#8b1a1a", "#1d6b1d", "#1a3f8b"];
+            lastRealCellCm = real[0].length() / (10 * SCENE_MM_SCALE);
             real.forEach((v, i) => {
               const L = v.length();
               cellGroup.add(arrow(v.clone().normalize(), origin, L, new THREE.Color(css[i]).getHex(),
@@ -2615,6 +2615,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         drawStructureFactors(col(0), col(1), col(2));
       }
       lastAtoms = null;
+      if (!recipState.showRealCell) lastRealCellCm = null;
       if (recipState.ub && recipState.showAtoms) {
         const U = recipState.ub;
         const col = (j) => new THREE.Vector3(U[0][j], U[1][j], U[2][j]).multiplyScalar(s);
@@ -3146,6 +3147,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         sfSpheres: lastSf ? lastSf.spheres : 0,
         sfSource: lastSfSource,
         atoms: lastAtoms,
+        realCellCm: lastRealCellCm,
         sfMaxRadiusPerInvAng: lastSf ? lastSf.maxRadius / recScale() : 0,
         detectorNodes: lastDetNodes,
         zone: bzCache.key ? { vertices: bzCache.vertices, edges: bzCache.edges.length } : null,

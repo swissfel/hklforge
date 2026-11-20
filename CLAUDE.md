@@ -236,7 +236,8 @@ optional Debye-Waller falloff exp(-2B s^2) with a typed B.
 
 Real-space structure (experimental, same day): `structure_atoms(st)` ->
 `message(structure=...)`; page option "real-space structure: atoms" with
-n_a x n_b x n_c cells (block centred on the sample, own scale cm/A), size by
+n_a x n_b x n_c cells (block centred on the sample, real-space scale slider
+"1 A drawn as" next to the reciprocal one, also used by the real-space unit cell), size by
 element (covalent/2) | equal | Debye-Waller 50 % sphere (1.538 sqrt(B/8pi^2)),
 polyhedra around a chosen element (first-shell element only, cutoff 1.2 x
 sum of covalent radii, brute-force convex hull); without a structure the
