@@ -3532,7 +3532,15 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         forgetting = true;
         if (remembering()) addSnapshot("before start fresh", lastAutosave, getDisplay(), true);
         lsDel(STATE_KEY);
-        window.parent.location.reload();
+        // msg.reloadTo: the app's own address without what it was opened with
+        // (e.g. a link's state), so starting fresh does not apply it again;
+        // same origin only, else a plain reload
+        let to = null;
+        try {
+          const u = new URL(String(msg.reloadTo || ""), window.parent.location.href);
+          if (msg.reloadTo && u.origin === window.parent.location.origin) to = u.href;
+        } catch (e) { /* no or bad address: reload */ }
+        if (to) window.parent.location.replace(to); else window.parent.location.reload();
         return;
       }
       if (msg.autosave) { lastAutosave = msg.autosave; storeState(); }
