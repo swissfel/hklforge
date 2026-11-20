@@ -63,7 +63,7 @@ Keep it that way:
 
 hklforge 0.1.0 was submitted to conda-forge on 2026-11-09:
 [staged-recipes PR #35560](https://github.com/conda-forge/staged-recipes/pull/35560).
-The submitted recipe is in [`dev/conda-forge/`](../dev/conda-forge/) (v1 format,
+The submitted recipe is in [`dev/conda-forge/`](https://github.com/swissfel/hklforge/tree/main/dev/conda-forge) (v1 format,
 with `run_test.py`, the solver smoke test).
 It was built and tested locally with `rattler-build` and passes
 `conda-smithy recipe-lint`. The test runs on Python 3.11 (conda-forge's

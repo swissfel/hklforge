@@ -184,7 +184,7 @@ g = Geometry.from_xrayutilities(["x+", "z-", "y+", "z-"], ["x+", "z-"], r_i=(0, 
 g.bisect_circle = "chi"          # only needed for bisect / omega
 ```
 
-or a YAML file like [`psic.yml`](../src/hklforge/geometries/psic.yml) with
+or a YAML file like [`psic.yml`](https://github.com/swissfel/hklforge/blob/main/src/hklforge/geometries/psic.yml) with
 `azimuth_zero` and `bisect_circle`. The planner needs nothing else: modes,
 counting and solving follow from the axes.
 

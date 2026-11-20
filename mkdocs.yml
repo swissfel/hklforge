@@ -1,0 +1,39 @@
+site_name: hklforge
+site_description: Diffractometer angle solvers generated exactly from a declared geometry, with crystallography for planning
+site_url: https://hklforge.readthedocs.io/
+repo_url: https://github.com/swissfel/hklforge
+repo_name: swissfel/hklforge
+edit_uri: edit/main/docs/
+copyright: Copyright (c) 2026 Henrik Lemke, BSD-3-Clause
+
+docs_dir: docs
+exclude_docs: |
+  make_figures.py
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/brightness-7, name: Dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/brightness-4, name: Light mode}
+
+nav:
+  - Overview: README.md
+  - Virtual angles: virtual_angles.md
+  - Modes: modes.md
+  - Crystallography and orientation: crystallography.md
+  - 3D view and geometries: viewer.md
+  - Verification: verification.md
+  - Releasing: releasing.md
+
+markdown_extensions:
+  - tables
+  - toc: {permalink: true}
+  - admonition
+  - pymdownx.superfences

@@ -3,7 +3,7 @@
 Every quantity below is defined from lab-frame vectors of one position, so it
 means the same thing on any geometry hklforge can describe. For the psic
 six-circle the definitions are those of diffcalc (You 1999); the code is
-[`hklforge/virtual.py`](../src/hklforge/virtual.py), and
+[`hklforge/virtual.py`](https://github.com/swissfel/hklforge/blob/main/src/hklforge/virtual.py), and
 `Diffractometer.pseudo(angles)` returns all of them. Every value was checked
 against diffcalc's `get_virtual_angles` at 300 random positions: largest
 difference 3e-13 deg (see [verification](verification.md)).
