@@ -4,8 +4,8 @@
   beta, betain, betaout, tau, psi, omega, bisect), with its definition, a 3D
   figure and what holding it fixes.
 - [Modes](modes.md): how to write a mode, how many things to hold, the closed-form
-  chain used for each case, double diffraction and the detector distance,
-  other geometries.
+  chain used for each case, the energy as a free unknown within limits,
+  double diffraction and the detector distance, other geometries.
 - [Crystallography and orientation](crystallography.md): space groups
   (absences with the reason, equivalents), cells, CIF and structure factors,
   reflection lists and groups, U from reflections, `detector_towards`; what

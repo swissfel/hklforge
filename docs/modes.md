@@ -18,6 +18,7 @@ at, plus virtual-angle constraints ([definitions](virtual_angles.md)):
 | `bin_eq_bout`, `a_eq_b`, `bisect` | `True` |
 | `h2` | (h, k, l) of a second reflection to hold in Bragg condition |
 | `vomega` | `omega`, for a geometry that has a circle named omega |
+| `energy` | (lo, hi) in eV: the energy is free within these limits ([below](#the-energy-as-one-more-unknown)) |
 
 `solve` returns **every** solution: free circles wrapped to (−180, 180], held
 circles as given. Each solution is re-checked through the forward model
