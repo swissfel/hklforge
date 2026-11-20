@@ -159,7 +159,7 @@ detector along a direction. `detector_towards` returns the one closest to
 `near`'s detector circles.
 
 A worked example of all of this, from a CIF to the detector position, is the
-notebook [06_crystallography_planning](../examples/06_crystallography_planning.ipynb).
+notebook [06_crystallography_planning](https://github.com/swissfel/hklforge/blob/main/examples/06_crystallography_planning.ipynb).
 
 ## What was verified
 
