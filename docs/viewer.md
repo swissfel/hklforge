@@ -71,6 +71,17 @@ cells and Brillouin zones around Q and around target reflections, and:
   lattice points of the cell with its centring, all equal. The radius and
   colour table is `hklforge/crystal/elements.json`
   (`dev/make_element_table.py`, from ASE's tables); `element_style(symbol)`.
+  Optional **lattice planes** (in the same block): the (h k l) planes
+  h·x + k·y + l·z = integer (fractional coordinates) of Q's nearest hkl, of
+  the target reflections or of a typed hkl, d = 2π/|Q| apart and
+  perpendicular to Q, so in Bragg condition the beam meets them at θ (the
+  picture behind Bragg's law); at most 60 planes per reflection.
+- **Own window (experimental)**: the "⧉ own window" button moves the view and
+  its controls into a window of their own: a Document Picture-in-Picture
+  window where the browser has one (Chrome, Edge: no address bar, stays on
+  top), else a pop-up (every browser shows its address there, read-only). The
+  code stays in the page, so the app's updates keep arriving; closing the
+  window, or the button again, brings everything back.
 
 ```python
 from hklforge import Geometry
@@ -118,6 +129,15 @@ without a structure, the lattice points for P, F, I and R (8, 14, 9, 10) and
 the number of reciprocal nodes, all equal, and with the Debye–Waller falloff
 the radius ratio of the farthest to the nearest node equals
 exp(−2B Δs²)^(1/3) to 1e-6.
+
+Lattice planes (headless Chromium, Si, against a separate Python
+calculation): for typed (111), (100), (220), (311), (004) in 1-3 cells, for Q
+= (111) at a solved position and for two target reflections, the number of
+planes, the corners of every plane polygon (triangles, squares, the hexagons
+of (111) in 3×3×3) and d (to 1e-9) are the same. Own window: in Chromium
+with Picture-in-Picture and with it switched off (pop-up), the view moves, the
+canvas fills the new window, the app's updates arrive, a control there
+works, and closing the window brings the view back with its settings.
 
 ## The geometry explorer (`hklforge.view.explorer`)
 

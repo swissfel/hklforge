@@ -84,6 +84,8 @@
 <div id="app">
   <div id="viewport"></div>
   <div id="panel">
+    <button id="detach-btn" style="float:right;font-size:12px;margin-left:6px"
+            title="Experimental: move the view and its controls into a window of its own (Chrome/Edge: a picture-in-picture window without address bar that stays on top; other browsers: a pop-up window). Close that window, or press again, to bring it back.">&#10697; own window</button>
     <h1 id="view-title">3D diffractometer</h1>
     <div class="subtitle" id="view-subtitle"></div>
 
@@ -181,6 +183,16 @@
         </div>
         <label class="chk"><input type="checkbox" id="show-poly"> coordination polyhedra around
           <select id="poly-centre"></select></label>
+        <label class="chk"><input type="checkbox" id="show-planes"> lattice planes of
+          <select id="planes-of">
+            <option value="q">Q (its nearest hkl)</option>
+            <option value="targets">the target reflection(s)</option>
+            <option value="typed">h k l:</option>
+          </select>
+          <input type="text" id="planes-hkl" value="1 1 1" style="width:60px"></label>
+        <div class="hint">The (h k l) planes: h&middot;x + k&middot;y + l&middot;z = integer in fractional
+          coordinates, d = 2&pi;/|Q| apart and perpendicular to Q; in Bragg condition the
+          beam meets them at &theta;. Drawn inside the cells shown. <span id="planes-info"></span></div>
         <div class="hint">The atoms of the CIF in the real-space cell (the block of cells centred on
           the sample, on the real-space scale, turning with it), repeated over the cells chosen;
           atoms on a cell face, edge or corner are drawn on every one of them.
@@ -1749,6 +1761,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
                          showSf: false, sf: null, sfScale: 1, sfDw: false, sfB: 0.5,
                          showAtoms: false, structure: null, atomsN: [1, 1, 1], atomsSize: "element",
                          atomsScale: 1, showPoly: false, polyCentre: "", atomsCmPerA: 3,
+                         showPlanes: false, planesOf: "q", planesHkl: [1, 1, 1],
                          virtual: { show: false, which: [] } };
 
     // Keeps the Ewald sphere inside the view box: it can be far larger than
@@ -2166,6 +2179,64 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       return faces;
     }
 
+    // The planes h.f = m (f fractional, m integer) cut by the box [0, N]: each a
+    // convex polygon (edge crossings sorted by angle about their centre), drawn
+    // translucent with its outline. Returns {hkl, planes, vertices, d} or null.
+    const MAX_PLANES = 60;
+    function latticePlanes(hkl, N, at, color) {
+      if (!hkl.some((v) => v)) return null;
+      const corners = [];
+      for (const x of [0, N[0]]) for (const y of [0, N[1]]) for (const z of [0, N[2]]) corners.push([x, y, z]);
+      const dot = (f) => hkl[0] * f[0] + hkl[1] * f[1] + hkl[2] * f[2];
+      const vals = corners.map(dot);
+      const mLo = Math.ceil(Math.min(...vals) - 1e-9), mHi = Math.floor(Math.max(...vals) + 1e-9);
+      const edges = [];
+      for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) {
+        const diff = corners[i].map((v, k) => v !== corners[j][k]).filter(Boolean).length;
+        if (diff === 1) edges.push([corners[i], corners[j]]);
+      }
+      const n = at([hkl[0], hkl[1], hkl[2]]).sub(at([0, 0, 0]));   // only for the d below
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide,
+                                                depthWrite: false, clippingPlanes: clipPlanes });
+      const lineMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+      let planes = 0, capped = false;
+      const vertices = [];
+      for (let m = mLo; m <= mHi; m++) {
+        if (planes >= MAX_PLANES) { capped = true; break; }
+        const pts = [];
+        for (const [a, b] of edges) {
+          const va = dot(a) - m, vb = dot(b) - m;
+          if ((va > 1e-9 && vb > 1e-9) || (va < -1e-9 && vb < -1e-9)) continue;
+          const t = Math.abs(va - vb) < 1e-12 ? 0 : va / (va - vb);
+          const f = a.map((v, k) => v + t * (b[k] - v));
+          if (!pts.some((q) => q.every((v, k) => Math.abs(v - f[k]) < 1e-9))) pts.push(f);
+        }
+        if (pts.length < 3) continue;
+        const P = pts.map(at);
+        const c = P.reduce((acc, p) => acc.add(p), new THREE.Vector3()).divideScalar(P.length);
+        const nrm = new THREE.Vector3().subVectors(P[1], P[0]).cross(new THREE.Vector3().subVectors(P[2], P[0])).normalize();
+        const u = new THREE.Vector3().subVectors(P[0], c).normalize(), v = new THREE.Vector3().crossVectors(nrm, u);
+        P.sort((p, q) => Math.atan2(v.dot(p.clone().sub(c)), u.dot(p.clone().sub(c)))
+                         - Math.atan2(v.dot(q.clone().sub(c)), u.dot(q.clone().sub(c))));
+        const pos = [];
+        for (let i = 1; i + 1 < P.length; i++) for (const p of [P[0], P[i], P[i + 1]]) pos.push(p.x, p.y, p.z);
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pos), 3));
+        cellGroup.add(new THREE.Mesh(g, mat));
+        cellGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(P), lineMat));
+        planes++;
+        vertices.push(P.length);
+      }
+      // d in angstrom: the cell's real basis per angstrom is the real-space scale
+      const perA = recipState.atomsCmPerA * 10 * SCENE_MM_SCALE;
+      const R0 = [at([1, 0, 0]).sub(at([0, 0, 0])), at([0, 1, 0]).sub(at([0, 0, 0])), at([0, 0, 1]).sub(at([0, 0, 0]))];
+      const vol = R0[0].dot(new THREE.Vector3().crossVectors(R0[1], R0[2]));
+      const G = new THREE.Vector3().addScaledVector(new THREE.Vector3().crossVectors(R0[1], R0[2]), hkl[0])
+        .addScaledVector(new THREE.Vector3().crossVectors(R0[2], R0[0]), hkl[1])
+        .addScaledVector(new THREE.Vector3().crossVectors(R0[0], R0[1]), hkl[2]).divideScalar(vol);   // 1/(scene d)
+      return { hkl, planes, capped, vertices, d: 1 / G.length() / perA };
+    }
+
     function drawRealStructure(A, B, C, s) {
       const bc = new THREE.Vector3().crossVectors(B, C);
       const vol = A.dot(bc);
@@ -2286,7 +2357,25 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
           vertexCounts.push(P.length);
         }
       }
-      lastAtoms = { cellCm: R[0].length() / (10 * SCENE_MM_SCALE), counts, polyhedra: polys, vertices: vertexCounts, latticePoints: !st,
+      // lattice planes h.f = m inside the block [0, N] (fractional), one set per reflection
+      const planeSets = [];
+      if (recipState.showPlanes) {
+        const sets = [];
+        if (recipState.planesOf === "q" && lastMeasuredHkl) sets.push([lastMeasuredHkl.map(Math.round), 0x8800cc]);
+        if (recipState.planesOf === "targets") (recipState.targets || []).forEach((h, i) => sets.push([h.map(Math.round), [0x0a8f6a, 0xb5179e][i % 2]]));
+        if (recipState.planesOf === "typed") sets.push([recipState.planesHkl.map(Math.round), 0x8800cc]);
+        for (const [hkl, color] of sets) {
+          const res = latticePlanes(hkl, N, at, color);
+          if (res) planeSets.push(res);
+        }
+      }
+      const info = document.getElementById("planes-info");
+      if (info) info.textContent = !recipState.showPlanes ? "" : planeSets.length
+        ? planeSets.map((p) => "(" + p.hkl.join(" ") + "): " + p.planes + " planes" + (p.capped ? " (first " + p.planes + ")" : "")
+                       + ", d = " + p.d.toFixed(3) + " \u00c5").join("; ")
+        : "(no reflection to draw)";
+      lastAtoms = { planes: planeSets.map((p) => ({ hkl: p.hkl, planes: p.planes, vertices: p.vertices, d: p.d })),
+                    cellCm: R[0].length() / (10 * SCENE_MM_SCALE), counts, polyhedra: polys, vertices: vertexCounts, latticePoints: !st,
                     radii: Object.fromEntries([...byEl.keys()].map((el) => [el, radius(el, byEl.get(el)[0][2]) / perA])) };
     }
 
@@ -3030,7 +3119,10 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     }
-    const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+    // frames come from the window the view is in (its own window once detached),
+    // so they keep coming while the original tab is in the background
+    const frameHost = () => window.__frameHost || window;
+    const nextFrame = () => new Promise((r) => frameHost().requestAnimationFrame(r));
 
     // One rocking period as a looping GIF. Frames are rendered here, at
     // exact phases, rather than grabbed from the live loop, so the loop
@@ -3114,7 +3206,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       }
     }
     function animate() {
-      requestAnimationFrame(animate);
+      frameHost().requestAnimationFrame(animate);
       if (fx.on) {
         // opaque meshes cast shadows; the Ewald shell and the detector patch
         // are transparent and would darken everything
@@ -3350,6 +3442,10 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   const atomsScaleEl = document.getElementById("atoms-scale");
   const atomsScaleNumEl = document.getElementById("atoms-scale-num");
   const showPolyEl = document.getElementById("show-poly");
+  const showPlanesEl = document.getElementById("show-planes");
+  const planesOfEl = document.getElementById("planes-of");
+  const planesHklEl = document.getElementById("planes-hkl");
+  const parseHkl = (t) => { const v = String(t).trim().split(/[\s,;]+/).map(Number); return v.length === 3 && v.every(Number.isFinite) ? v : [0, 0, 0]; };
   const polyCentreEl = document.getElementById("poly-centre");
   let atomsFactorVal = 1;
   const atomsCmEl = document.getElementById("atoms-cm");
@@ -3566,6 +3662,9 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       atomsScale: atomsFactorVal,
       atomsCmPerA: Math.max(0.05, parseFloat(atomsCmNumEl.value) || 3),
       showPoly: showPolyEl.checked,
+      showPlanes: showPlanesEl.checked,
+      planesOf: planesOfEl.value,
+      planesHkl: parseHkl(planesHklEl.value),
       polyCentre: polyCentreEl.value,
       virtual: { show: showVirtualEl.checked, which: virtualShown() },
       cmPerInvAng: cm,
@@ -3612,6 +3711,9 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   atomsNEls.forEach((e) => e.addEventListener("input", refreshRecip));
   atomsSizeEl.addEventListener("change", refreshRecip);
   showPolyEl.addEventListener("change", refreshRecip);
+  showPlanesEl.addEventListener("change", refreshRecip);
+  planesOfEl.addEventListener("change", refreshRecip);
+  planesHklEl.addEventListener("input", refreshRecip);
   polyCentreEl.addEventListener("change", refreshRecip);
   atomsCmEl.addEventListener("input", () => { atomsCmNumEl.value = atomsCmEl.value; refreshRecip(); });
   atomsCmNumEl.addEventListener("input", () => {
@@ -3696,7 +3798,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     showAngleControls: showAngleCtrlEl, controlsBelow: controlsBelowEl,
     showAxes: showAxesEl, showBzPoints: showBzPointsEl, showVirtual: showVirtualEl,
     showStructureFactors: showSfEl, sfDebyeWaller: sfDwEl,
-    showAtoms: showAtomsEl, showPolyhedra: showPolyEl,
+    showAtoms: showAtomsEl, showPolyhedra: showPolyEl, showPlanes: showPlanesEl,
   };
 
   function getDisplay() {
@@ -3710,6 +3812,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     d.atomsScale = atomsFactorVal;
     d.atomsCm = parseFloat(atomsCmNumEl.value);
     d.polyCentre = polyCentreEl.value;
+    d.planesOf = planesOfEl.value;
+    d.planesHkl = planesHklEl.value;
     d.tdet = tdet;
     d.detW = parseFloat(detWEl.value);
     d.detH = parseFloat(detHEl.value);
@@ -3740,6 +3844,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       atomsScaleEl.value = Math.log10(atomsFactorVal);
       atomsScaleNumEl.value = fmtFactor(atomsFactorVal);
     }
+    if (typeof d.planesOf === "string" && [...planesOfEl.options].some((o) => o.value === d.planesOf)) planesOfEl.value = d.planesOf;
+    if (typeof d.planesHkl === "string") planesHklEl.value = d.planesHkl;
     if (typeof d.atomsCm === "number" && d.atomsCm > 0) { atomsCmNumEl.value = d.atomsCm; atomsCmEl.value = Math.max(0.2, Math.min(20, d.atomsCm)); }
     if (typeof d.polyCentre === "string" && [...polyCentreEl.options].some((o) => o.value === d.polyCentre)) {
       polyCentreEl.value = d.polyCentre;
@@ -3789,6 +3895,64 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   // writes into. Polling one string is cheap, needs no custom widget, and
   // leaves the page fully usable standalone (the read just fails silently).
   const statusEl = document.getElementById("status");
+
+  // --- detach: the whole page (#app: view + controls) into a window of its
+  //     own. Document Picture-in-Picture where the browser has it (Chrome,
+  //     Edge: no address bar, stays on top), else a pop-up (window.open; every
+  //     browser shows its address there). The elements move, the code stays
+  //     here: it keeps reading the app's payload from this frame's parent, and
+  //     getElementById also looks in the other window. ---------------------
+  const detachBtn = document.getElementById("detach-btn");
+  const getById = document.getElementById.bind(document);
+  let detached = null;                 // {win, placeholder, kind}
+  document.getElementById = (id) => getById(id)
+    || (detached && detached.win && !detached.win.closed ? detached.win.document.getElementById(id) : null);
+  function reattach() {
+    if (!detached) return;
+    const { win, placeholder } = detached;
+    const appEl = win.document && win.document.getElementById("app");
+    detached = null;
+    window.__frameHost = window;
+    if (appEl) placeholder.replaceWith(document.adoptNode(appEl));
+    else placeholder.remove();
+    detachBtn.innerHTML = "&#10697; own window";
+    setTimeout(() => app.resize(), 30);
+  }
+  async function detach() {
+    if (detached) { detached.win.close(); reattach(); return; }
+    let host = window;
+    try { if (window.top.document) host = window.top; } catch (e) { /* standalone or another origin */ }
+    let win = null, kind = "popup";
+    try {
+      if (host.documentPictureInPicture) {
+        win = await host.documentPictureInPicture.requestWindow({ width: 1100, height: 760 });
+        kind = "picture-in-picture";
+      }
+    } catch (e) { win = null; }
+    if (!win) win = host.open("", "", "popup=yes,width=1200,height=820");
+    if (!win) { statusEl.textContent = "the browser blocked the new window: allow pop-ups for this page"; return; }
+    const d = win.document;
+    d.title = (getById("view-title") || {}).textContent || "3D view";
+    for (const st of document.querySelectorAll("style")) d.head.appendChild(st.cloneNode(true));
+    d.body.style.margin = "0";
+    const appEl = getById("app");
+    const placeholder = document.createElement("div");
+    placeholder.id = "detached-note";
+    placeholder.style.cssText = "padding:24px;font:14px sans-serif;color:#555";
+    placeholder.innerHTML = "The 3D view is in its own window (" + kind + "). <button>bring it back</button>";
+    appEl.parentNode.insertBefore(placeholder, appEl);
+    d.body.appendChild(d.adoptNode(appEl));
+    detached = { win, placeholder, kind };
+    window.__frameHost = win;
+    detachBtn.innerHTML = "&#10697; back into the page";
+    placeholder.querySelector("button").addEventListener("click", () => { win.close(); reattach(); });
+    win.addEventListener("resize", () => app.resize());
+    win.addEventListener("pagehide", reattach);
+    setTimeout(() => app.resize(), 30);
+  }
+  detachBtn.addEventListener("click", detach);
+  window.addEventListener("pagehide", () => { if (detached) detached.win.close(); });
+  window.__detach = { detach, reattach, state: () => (detached ? detached.kind : null) };   // for automated checks
   let lastPayload = null;
 
   // --- the app's state, remembered in this browser ---------------------

@@ -243,7 +243,12 @@ polyhedra around a chosen element (first-shell element only, cutoff 1.2 x
 sum of covalent radii, brute-force convex hull); without a structure the
 lattice points. `crystal/elements.json` (Cordero radii, Jmol colours, from
 ASE via `dev/make_element_table.py`), `crystal.examples` (5 CIFs).
-`debugCounts().atoms` for browser checks.
+`debugCounts().atoms` for browser checks. Lattice planes of Q / targets /
+typed hkl in that block (`atoms.planes`: hkl, count, polygon corners, d).
+Own window (experimental, "detach-btn"): #app moves into a Document
+Picture-in-Picture window (Chrome/Edge) or a pop-up; document.getElementById
+is wrapped to look there too, frames come from that window (`__frameHost`),
+`__detach.state()` for checks.
 
 ## Next
 
