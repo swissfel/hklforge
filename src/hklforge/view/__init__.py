@@ -53,7 +53,7 @@ def geometry_message(geometry: Geometry) -> dict:
 def message(geometry: Geometry | None = None, angles: dict | None = None, *, ub=None,
             k: float | None = None, energy: float | None = None, surface=None, reference=None,
             label: str = "", targets=None, special_points: dict | None = None, n: int = 0,
-            **extra) -> dict:
+            structure_factors: dict | None = None, **extra) -> dict:
     """The JSON the page reads (see the module docstring).
 
     ``geometry``: only needed when the page should change geometry (it is
@@ -61,7 +61,9 @@ def message(geometry: Geometry | None = None, angles: dict | None = None, *, ub=
     frame, 2 pi convention; ``k`` = abs(k) = 2 pi / lambda (or ``energy``
     in eV); ``surface`` / ``reference``: phi-frame vectors for betain/betaout
     and alpha/beta/psi/naz/tau; ``targets``: reflections drawn as nodes;
-    ``special_points``: :func:`hklforge.crystal.bz.special_points`. Any
+    ``special_points``: :func:`hklforge.crystal.bz.special_points`;
+    ``structure_factors``: :func:`structure_factor_nodes`, drawn as spheres
+    (volume proportional to abs(F)^2) when the page's option is on. Any
     further key (``display``, ``ghosts``, ``detectors``, ``memory`` ...)
     is passed on as is.
     """
@@ -88,8 +90,49 @@ def message(geometry: Geometry | None = None, angles: dict | None = None, *, ub=
                      "points": {name: _vec(h) for name, h in special_points.get("points", {}).items()},
                      "path": [list(seg) for seg in special_points.get("path", [])],
                      "note": special_points.get("note", "")}
+    if structure_factors is not None:
+        msg["structureFactors"] = structure_factors
     msg.update(extra)
     return msg
+
+
+def structure_factor_nodes(structure, energy: float | None = None, d_min: float | None = None,
+                           max_nodes: int = 4000, thermal: bool = True) -> dict:
+    """Every reflection of ``structure`` with d >= ``d_min`` and its abs(F)^2,
+    as the page's ``structureFactors`` (``message(structure_factors=...)``).
+
+    ``energy`` (eV) includes f' + i f'' and sets the default ``d_min`` to
+    lambda / 2 (all reflections reachable at that energy); without it,
+    ``d_min`` is needed. Each node of the lattice is listed (all equivalents,
+    not one per set), allowed by the space group, nearest to the origin first,
+    at most ``max_nodes``. Needs xraydb (``hklforge[crystal]``).
+
+    Returns ``{"hkl": [[h, k, l], ...], "f2": [...], "energy", "dMin",
+    "total", "name"}``; ``total`` counts the reflections before the cap.
+    """
+    from ..crystal.cell import b_matrix, cell_tuple, wavelength
+    if d_min is None:
+        if energy is None:
+            raise ValueError("give the energy or d_min")
+        d_min = wavelength(energy) / 2
+    B = b_matrix(*cell_tuple(structure.cell))
+    qmax = 2 * np.pi / d_min
+    lim = [int(np.floor(qmax / np.linalg.norm(B @ e))) for e in np.eye(3)]
+    if np.prod([2 * m + 1 for m in lim]) > 2e6:
+        raise ValueError("too many reflections: raise d_min")
+    H = np.stack(np.meshgrid(*[np.arange(-m, m + 1) for m in lim], indexing="ij"), -1).reshape(-1, 3)
+    q = np.linalg.norm(H @ B.T, axis=1)
+    keep = (q > 0) & (q <= qmax * (1 + 1e-9))
+    if structure.space_group is not None:
+        keep &= structure.space_group.allowed_mask(H)
+    H, q = H[keep], q[keep]
+    order = np.argsort(q, kind="stable")
+    total = len(order)
+    H = H[order[:max_nodes]]
+    f2 = np.abs(structure.structure_factors(H, energy, thermal=thermal)) ** 2
+    return {"hkl": H.astype(int).tolist(), "f2": [float(x) for x in f2],
+            "energy": None if energy is None else float(energy), "dMin": float(d_min),
+            "total": int(total), "name": structure.name}
 
 
 def page(geometry: Geometry | None = None, view_id: str = "diff3d", storage: str | None = None,

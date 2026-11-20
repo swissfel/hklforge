@@ -139,6 +139,21 @@
       <label class="chk"><input type="checkbox" id="show-hkl-cell"> label Q with hkl + cells around Q and the target reflections</label>
       <label class="chk"><input type="checkbox" id="show-hkl-bz"> Brillouin zones around Q and the target reflections</label>
       <label class="chk"><input type="checkbox" id="show-bz-points"> Brillouin-zone special points and paths (&Gamma;, X, L, &hellip;) <span id="bz-points-info" style="color:#777"></span></label>
+      <label class="chk"><input type="checkbox" id="show-sf"> structure factors as spheres (volume &prop; |F|&sup2;) <span id="sf-info" style="color:#777"></span></label>
+      <div id="sf-box" style="margin-left:18px; display:none">
+        <div class="angle-row">
+          <label><span>sphere size</span><span id="sf-scale-val">1&times;</span></label>
+          <div class="row-controls">
+            <input type="range" id="sf-scale" min="-2" max="1.301" step="0.001" value="0" style="flex:1">
+            <input type="number" id="sf-scale-num" min="0.01" max="20" step="any" value="1">
+          </div>
+        </div>
+        <div class="hint">One sphere per reflection the app sent, at its reciprocal-lattice
+          node, turning with the sample. Sphere volume is proportional to |F|&sup2;
+          (radius to |F|<sup>2/3</sup>), so the sizes compare intensities; the slider scales
+          all spheres together. At 1&times; the strongest one is 0.8 of the shortest of
+          a*, b*, c* across. Forbidden reflections (|F| = 0) get no sphere.</div>
+      </div>
       <label class="chk"><input type="checkbox" id="show-ewald"> show Ewald sphere (radius |k|)</label>
       <label class="chk"><input type="checkbox" id="show-det-patch"> show detector cut of the Ewald sphere</label>
       <label class="chk"><input type="checkbox" id="show-ghost-det" checked> two reflections: the detector also on the other reflection</label>
@@ -1688,6 +1703,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
                          cmPerInvAng: 5, kMag: null, ub: null,
                          detW: 77, detH: 77,
                          showBzPoints: false, bz: null, refScene: null, surfScene: null,
+                         showSf: false, sf: null, sfScale: 1,
                          virtual: { show: false, which: [] } };
 
     // Keeps the Ewald sphere inside the view box: it can be far larger than
@@ -1998,6 +2014,39 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         }
       }
       lastBzCount = count;
+    }
+
+    // --- structure factors (msg.structureFactors: hkl and |F|^2): one sphere
+    //     per reflection at its node, volume proportional to |F|^2, all drawn
+    //     as one instanced mesh. Scale 1: the strongest is 0.8 of the
+    //     shortest of a*, b*, c* across; recipState.sfScale multiplies all.
+    let lastSf = null;
+    const SF_COLOR = 0x2b7bb9;
+    function drawStructureFactors(A, B, C) {
+      const { hkl, f2 } = recipState.sf;
+      let fmax = 0;
+      for (const v of f2) if (v > fmax) fmax = v;
+      if (!(fmax > 0)) { lastSf = { spheres: 0, maxRadius: 0 }; return; }
+      const r0 = 0.4 * Math.min(A.length(), B.length(), C.length()) * recipState.sfScale;
+      const keep = [];
+      for (let i = 0; i < hkl.length; i++) if (f2[i] > 1e-9 * fmax) keep.push(i);
+      const mesh = new THREE.InstancedMesh(
+        new THREE.SphereGeometry(1, 20, 14),
+        new THREE.MeshStandardMaterial({ color: SF_COLOR, metalness: 0.1, roughness: 0.45,
+                                         clippingPlanes: clipPlanes }),
+        keep.length);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+      keep.forEach((i, j) => {
+        const r = r0 * Math.cbrt(f2[i] / fmax);
+        m.compose(nodePosition(hkl[i], A, B, C), q, sc.set(r, r, r));
+        mesh.setMatrixAt(j, m);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      cellGroup.add(mesh);
+      lastSf = { spheres: keep.length, maxRadius: r0, radiusOf: (h) => {
+        const i = hkl.findIndex((x) => x[0] === h[0] && x[1] === h[1] && x[2] === h[2]);
+        return i < 0 || !(f2[i] > 1e-9 * fmax) ? 0 : r0 * Math.cbrt(f2[i] / fmax);
+      }, A, B, C };
     }
 
     function updateRecip() {
@@ -2317,6 +2366,12 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         const U = recipState.ub;
         const col = (j) => new THREE.Vector3(U[0][j], U[1][j], U[2][j]).multiplyScalar(s);
         drawBzPoints(col(0), col(1), col(2));
+      }
+      lastSf = null;
+      if (recipState.ub && recipState.showSf && recipState.sf && recipState.sf.hkl) {
+        const U = recipState.ub;
+        const col = (j) => new THREE.Vector3(U[0][j], U[1][j], U[2][j]).multiplyScalar(s);
+        drawStructureFactors(col(0), col(1), col(2));
       }
       updateVirtual();
       lastDetNodes = detNodes;
@@ -2841,6 +2896,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         virtual: lastVirtual,
         virtualObjects: virtualGroup.children.length,
         bzPoints: lastBzCount,
+        sfSpheres: lastSf ? lastSf.spheres : 0,
+        sfMaxRadiusPerInvAng: lastSf ? lastSf.maxRadius / recScale() : 0,
         detectorNodes: lastDetNodes,
         zone: bzCache.key ? { vertices: bzCache.vertices, edges: bzCache.edges.length } : null,
         surfaceNormalPhi: sampleGroup.localToWorld(new THREE.Vector3(0, 0, 1))
@@ -2876,7 +2933,10 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       };
     }
 
-    return { setAngles, setDetectorDistance, setShowCircles, setRecip,
+    // radius of the sphere at hkl, in 1/A (0: none), for the browser check
+    function sfRadius(h) { return lastSf && lastSf.radiusOf ? lastSf.radiusOf(h) / recScale() : 0; }
+
+    return { sfRadius, setAngles, setDetectorDistance, setShowCircles, setRecip,
              setSurfaceNormal, setEnhanced, saveRockingGif, saveRockingMovie,
              resize, debugCounts, setGeometry, setShowAxes, setFocus, toScene, toSceneMatrix,
              circleColor };
@@ -3027,6 +3087,12 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   const showDetBzEl = document.getElementById("show-det-bz");
   const showAxesEl = document.getElementById("show-axes");
   const showBzPointsEl = document.getElementById("show-bz-points");
+  const showSfEl = document.getElementById("show-sf");
+  const sfScaleEl = document.getElementById("sf-scale");
+  const sfScaleNumEl = document.getElementById("sf-scale-num");
+  let sfFactorVal = 1;               // exact when typed; the slider is log10 of it
+  const sfFactor = () => sfFactorVal;
+  const fmtFactor = (f) => (f >= 10 ? f.toFixed(0) : f >= 1 ? f.toFixed(1) : f.toPrecision(2)).replace(/\.0$/, "");
   const showVirtualEl = document.getElementById("show-virtual");
 
   // --- virtual angles: one unfoldable entry per angle -------------------
@@ -3207,6 +3273,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
 
   function refreshRecip() {
     document.getElementById("virtual-box").style.display = showVirtualEl.checked ? "" : "none";
+    document.getElementById("sf-box").style.display = showSfEl.checked ? "" : "none";
+    document.getElementById("sf-scale-val").textContent = fmtFactor(sfFactor()) + "\u00d7";
     const cm = parseFloat(recScaleEl.value);
     document.getElementById("rec-scale-val").textContent = cm.toFixed(1) + " cm";
     app.setRecip({
@@ -3222,6 +3290,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       showGhostDet: showGhostDetEl.checked,
       showDetBz: showDetBzEl.checked,
       showBzPoints: showBzPointsEl.checked,
+      showSf: showSfEl.checked,
+      sfScale: sfFactor(),
       virtual: { show: showVirtualEl.checked, which: virtualShown() },
       cmPerInvAng: cm,
       detW: parseFloat(detWEl.value) || 77,
@@ -3260,6 +3330,19 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   showGhostDetEl.addEventListener("change", refreshRecip);
   showDetBzEl.addEventListener("change", refreshRecip);
   showBzPointsEl.addEventListener("change", refreshRecip);
+  showSfEl.addEventListener("change", refreshRecip);
+  sfScaleEl.addEventListener("input", () => {
+    sfFactorVal = Math.pow(10, parseFloat(sfScaleEl.value));
+    sfScaleNumEl.value = fmtFactor(sfFactor());
+    refreshRecip();
+  });
+  sfScaleNumEl.addEventListener("input", () => {
+    const v = parseFloat(sfScaleNumEl.value);
+    if (!(v > 0)) return;
+    sfFactorVal = Math.max(0.01, Math.min(20, v));
+    sfScaleEl.value = Math.log10(sfFactorVal);
+    refreshRecip();
+  });
   showVirtualEl.addEventListener("change", refreshRecip);
   showAxesEl.addEventListener("change", () => app.setShowAxes(showAxesEl.checked));
   detWEl.addEventListener("input", refreshRecip);
@@ -3288,12 +3371,14 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     showHklBz: showHklBzEl, showDetBz: showDetBzEl, showRealCell: showRealCellEl, showGhostDet: showGhostDetEl, enhanced3d: enhancedEl, rock3d: rockEl,
     showAngleControls: showAngleCtrlEl, controlsBelow: controlsBelowEl,
     showAxes: showAxesEl, showBzPoints: showBzPointsEl, showVirtual: showVirtualEl,
+    showStructureFactors: showSfEl,
   };
 
   function getDisplay() {
     const d = {};
     for (const [key, el] of Object.entries(displayChecks)) d[key] = el.checked;
     d.recScale = parseFloat(recScaleEl.value);
+    d.sfScale = sfFactor();
     d.tdet = tdet;
     d.detW = parseFloat(detWEl.value);
     d.detH = parseFloat(detHEl.value);
@@ -3310,6 +3395,11 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     if (typeof d.recScale === "number") {
       recScaleEl.value = d.recScale;
       recScaleNumEl.value = d.recScale;
+    }
+    if (typeof d.sfScale === "number" && d.sfScale > 0) {
+      sfFactorVal = Math.max(0.01, Math.min(20, d.sfScale));
+      sfScaleEl.value = Math.log10(sfFactorVal);
+      sfScaleNumEl.value = fmtFactor(sfFactor());
     }
     if (typeof d.detW === "number") detWEl.value = d.detW;
     if (typeof d.detH === "number") detHEl.value = d.detH;
@@ -3575,6 +3665,14 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
           : "(" + (msg.bz.variant || msg.bz.lattice || "") + ")";
       }
       if (typeof msg.centring === "string") opts.centring = msg.centring;
+      if ("structureFactors" in msg) {
+        const sf = msg.structureFactors;
+        opts.sf = sf && Array.isArray(sf.hkl) && Array.isArray(sf.f2) ? sf : null;
+        const info = document.getElementById("sf-info");
+        if (info) info.textContent = !opts.sf ? "(needs a structure: load a CIF)"
+          : "(" + opts.sf.hkl.length + (opts.sf.total > opts.sf.hkl.length ? " of " + opts.sf.total : "")
+            + " reflections" + (typeof opts.sf.energy === "number" ? ", " + (opts.sf.energy / 1000).toFixed(3) + " keV" : "") + ")";
+      }
       if (Array.isArray(msg.ghosts)) opts.ghosts = msg.ghosts;
       if (Array.isArray(msg.targets)) opts.targets = msg.targets;
       if ("nPhi" in msg) {

@@ -220,6 +220,18 @@ with constraints. Verified in `tests/test_energy.py` (docs/verification.md
 "Free energy"): 880 random-geometry trials truth recovered; solutions = the
 fixed-energy planner's at their energy; e_q1 = brute-force eta scan (47/47).
 
+## Structure-factor spheres in the 3D view (added 2026-11-20)
+
+`hklforge.view.structure_factor_nodes(structure, energy, d_min=, max_nodes=4000)`
+-> `{"hkl", "f2", "energy", "dMin", "total", "name"}` (every allowed node
+with d >= lambda/2, all equivalents, nearest first); `message(...,
+structure_factors=...)` sends it as `structureFactors`. The page: Display
+option "structure factors as spheres" (`showStructureFactors` in the display
+settings) + log size slider (`sfScale`, 0.01-20, typed values exact);
+volume ~ |F|^2, one `InstancedMesh` in cellGroup (phi frame). At 1x the
+strongest radius = 0.4 min(|a*|,|b*|,|c*|). `debugCounts().sfSpheres` and
+`__diffApp.sfRadius(hkl)` for browser checks. Verified in Chromium (docs/viewer.md).
+
 ## Next
 
 Kappa <-> Euler conversion modes (a kappa *geometry* already works, see

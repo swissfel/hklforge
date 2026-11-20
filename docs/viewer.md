@@ -42,6 +42,16 @@ cells and Brillouin zones around Q and around target reflections, and:
   `hklforge.crystal.bz.special_points`) around the zone Q is in.
 - **Circle axes and names**, and a **focus** on one circle (the others fade):
   how the stack is built.
+- **Structure factors as spheres**: one sphere per reflection at its
+  reciprocal-lattice node, turning with the sample, its **volume proportional
+  to |F|²** (radius ∝ |F|^(2/3)), so sizes compare intensities. A size slider
+  (0.01× to 20×, logarithmic, or typed exactly) scales every sphere together;
+  at 1× the strongest is 0.8 of the shortest of a*, b*, c* across. Forbidden
+  reflections get none. The data come from the app:
+  `structure_factor_nodes(structure, energy)` lists every allowed node with
+  d ≥ λ/2 (all equivalents, nearest first, at most 4000) with its |F|² at that
+  energy (f′ + i f″ included, so Friedel pairs differ near an edge); pass it as
+  `message(..., structure_factors=...)`. Needs xraydb (`hklforge[crystal]`).
 
 ```python
 from hklforge import Geometry
@@ -53,7 +63,8 @@ frame = widgets.HTML(iframe(page(geometry), height=700))
 holder = widgets.HTML()
 holder.value = payload_html(message(geometry, angles, ub=d.ub, k=d.k,
                                     surface=d.surface, reference=d.reference,
-                                    special_points=sp, n=counter))
+                                    special_points=sp, n=counter,
+                                    structure_factors=structure_factor_nodes(st, energy)))
 ```
 
 A message carries lab-frame vectors as hklforge has them (UB and the normals in
@@ -68,6 +79,15 @@ prefixes the browser-storage keys of the remembered state and snapshots.
 k4cv, k6c and psic in a beam-z/up-y frame, random UB, surface, reference and
 positions, the page's own measured hkl equals `Diffractometer.hkl` to 3e-15
 and its virtual angles equal `hklforge.virtual` to 3e-13 degrees.
+
+Structure-factor spheres (2026-11-20, headless Chromium, GaAs at 9 keV, 560
+reflections): the page draws one sphere per reflection with |F| > 0, every
+radius equals 0.4·min(|a*|, |b*|, |c*|)·factor·(|F|²/max|F|²)^(1/3) from
+Python's |F|² to 1e-4 at slider 1×, 2.5× and typed 0.5× (exact when typed,
+the slider resolution otherwise), and none are drawn with the option off.
+`tests/test_view.py` checks the data: the same |F|² as `reflection_list`,
+all reachable allowed nodes present, nearest first, Friedel pairs differing at
+the Ga K edge.
 
 ## The geometry explorer (`hklforge.view.explorer`)
 

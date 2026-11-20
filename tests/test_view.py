@@ -97,3 +97,47 @@ def test_explorer_widget():
     e.yaml.value = "name: broken"
     e._on_yaml()
     assert "beam" in e.yaml_msg.value                       # an error shown, not raised
+
+
+def test_structure_factor_nodes():
+    """The spheres' data: every allowed node within d >= lambda/2 (all
+    equivalents), |F|^2 as the reflection list computes it, nearest first."""
+    import pytest
+    pytest.importorskip("xraydb")
+    pytest.importorskip("pandas")
+    from pathlib import Path
+    from hklforge.crystal import reflections
+    from hklforge.crystal.cell import d_spacing, wavelength
+    from hklforge.crystal.structure import read_cif
+    from hklforge.view import structure_factor_nodes
+    st = read_cif((Path(__file__).parent / "data" / "GaAs.cif").read_text())
+    energy = 10367.0                                   # at the Ga K edge: f', f'' matter
+    sf = structure_factor_nodes(st, energy)
+    H = np.array(sf["hkl"])
+    f2 = np.array(sf["f2"])
+    assert sf["total"] == len(H) and sf["dMin"] == pytest.approx(wavelength(energy) / 2)
+    d = d_spacing(st.cell, H)
+    assert np.all(d >= sf["dMin"] * (1 - 1e-9)) and np.all(np.diff(d) <= 1e-9)   # nearest first
+    assert np.all(st.space_group.allowed_mask(H))
+    assert {(1, 1, 1), (-1, -1, -1), (1, -1, 1), (2, 0, 0), (0, 0, -2)} <= set(map(tuple, H))
+    assert (1, 0, 0) not in set(map(tuple, H))         # F-centred: forbidden, no sphere
+    # anomalous terms: Friedel pairs differ near the edge
+    i, j = (sf["hkl"].index(h) for h in ([1, 1, 1], [-1, -1, -1]))
+    assert abs(f2[i] - f2[j]) > 1e-3 * f2[i]
+    # the same |F|^2 as the reflection list (one per set of equivalents)
+    lst = reflections.reflection_list(st.cell, energy, structure=st, unique=False)
+    ref = {(int(r.h), int(r.k), int(r.l)): r["|F|²"] for _, r in lst.iterrows()}
+    common = [k for k in ref if k in set(map(tuple, H))]
+    assert len(common) > 50
+    for k in common:
+        assert f2[sf["hkl"].index(list(k))] == pytest.approx(ref[k], rel=1e-9)
+    # every reachable node is there: none with d >= lambda/2 missing
+    assert set(ref) <= set(map(tuple, H)) | {k for k in ref if ref[k] < 1e-9}
+    # the cap keeps the nearest, counts the rest
+    small = structure_factor_nodes(st, energy, max_nodes=10)
+    assert len(small["hkl"]) == 10 and small["total"] == sf["total"]
+    assert small["hkl"] == sf["hkl"][:10]
+    msg = message(structure_factors=small)
+    assert json.loads(json.dumps(msg))["structureFactors"]["hkl"] == small["hkl"]
+    with pytest.raises(ValueError):
+        structure_factor_nodes(st)
