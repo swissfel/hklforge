@@ -195,3 +195,46 @@ def test_equivalence_groups_and_columns():
     assert list(cols["allowed"]) == [True, True, False]
     assert cols["why not"][1] == "allowed by symmetry, F = 0 (atom positions)"
     assert cols["|F|²"][0] == pytest.approx(cols["|F|"][0] ** 2) and cols["I rel"][0] == pytest.approx(1)
+
+
+def test_triplet_round_trip():
+    from hklforge.crystal.spacegroups import format_triplet, same_ops
+    for name in ("Fd-3m:2", "R-3m:H", "P21/c", "P63/mmc", "I41/amd:1"):
+        ops = SpaceGroup(name).all_ops()
+        again = [parse_triplet(format_triplet(R, t)) for R, t in ops]
+        assert same_ops(ops, again)
+    assert format_triplet(*parse_triplet("1/2-x, y, -z")) == "-x+1/2,y,-z"
+    assert not same_ops(SpaceGroup("Fd-3m:1").all_ops(), SpaceGroup("Fd-3m:2").all_ops())
+
+
+@pytest.mark.parametrize("source", [NACL, SI_NUMBER_ONLY, DATA / "TiO2_rutile.cif", DATA / "GaAs.cif",
+                                    DATA / "Bi2Se3.cif"])
+def test_structure_dict_round_trip(source):
+    import json
+
+    from hklforge.crystal.structure import Structure
+    st = read_cif(source)
+    d = json.loads(json.dumps(st.to_dict()))              # plain JSON
+    again = Structure.from_dict(d)
+    assert again.cell == st.cell and again.name == st.name and again.notes == st.notes
+    assert (again.space_group is None) == (st.space_group is None)
+    if st.space_group is not None:
+        assert again.space_group.name == st.space_group.name
+    a, b = st.atoms()[1], again.atoms()[1]
+    assert len(a) == len(b) and np.allclose(np.sort(a, axis=0), np.sort(b, axis=0), atol=1e-6)
+    assert [s.scatterer for s in again.sites] == [s.scatterer for s in st.sites]
+    if xraydb is not None:
+        assert np.allclose(np.abs(again.structure_factors(H[:30], 9000)), np.abs(st.structure_factors(H[:30], 9000)))
+
+
+def test_structure_dict_keeps_ops_without_space_group():
+    from hklforge.crystal.structure import Structure
+    text = NACL.replace("_symmetry_space_group_name_H-M 'F m -3 m'",
+                        "loop_\n_symmetry_equiv_pos_as_xyz\n" + "\n".join(
+                            f"'{t}'" for t in ("x,y,z", "x,y+1/2,z+1/2", "x+1/2,y,z+1/2", "x+1/2,y+1/2,z")))
+    st = read_cif(text)
+    assert st.space_group is None
+    d = st.to_dict()
+    assert len(d["ops"]) == 4
+    assert len(Structure.from_dict(d).atoms()[1]) == len(st.atoms()[1]) == 8
+    assert "ops" not in read_cif(NACL).to_dict()            # the space group's own: not repeated

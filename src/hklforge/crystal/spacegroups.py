@@ -66,6 +66,31 @@ def parse_triplet(text: str):
     return R, t
 
 
+def format_triplet(R, t) -> str:
+    """(R, t) -> 'x,y,z' triplet, e.g. '-y+1/4,x+1/4,z+1/4' (``parse_triplet``'s inverse)."""
+    parts = []
+    for i in range(3):
+        terms = ""
+        for j, var in enumerate("xyz"):
+            c = int(round(R[i][j]))
+            if c:
+                terms += ("-" if c < 0 else "+" if terms else "") + (f"{abs(c)}*" if abs(c) != 1 else "") + var
+        f = Fraction(float(t[i])).limit_denominator(48)
+        if f:
+            terms += ("-" if f < 0 else "+" if terms else "") + str(abs(f))
+        parts.append(terms or "0")
+    return ",".join(parts)
+
+
+def same_ops(a, b) -> bool:
+    """Whether two lists of (R, t) are the same set of operations (t modulo 1)."""
+    def key(op):
+        R, t = op
+        return (tuple(int(round(x)) for x in np.ravel(R)),
+                tuple(int(round((float(x) % 1.0) * 48)) % 48 for x in t))
+    return len(a) == len(b) and {key(o) for o in a} == {key(o) for o in b}
+
+
 def _reduced(v) -> tuple:
     v = [int(round(x)) for x in v]
     g = 0

@@ -24,7 +24,7 @@ import numpy as np
 
 from . import cif
 from .cell import AVOGADRO, b_matrix, cell_tuple, volume
-from .spacegroups import SpaceGroup, parse_triplet
+from .spacegroups import SpaceGroup, format_triplet, parse_triplet, same_ops
 
 try:
     import xraydb
@@ -58,6 +58,35 @@ class Structure:
             if self.space_group is None:
                 raise ValueError("a structure needs a space group or its symmetry operations")
             self.ops = self.space_group.all_ops()
+
+    # --- as plain data (JSON) ---
+
+    def to_dict(self) -> dict:
+        """Everything needed to rebuild it (``from_dict``), as JSON-ready data:
+        name, cell, space group name, the sites as
+        ``[label, element, scatterer, x, y, z, occupancy, b_iso]`` and, only
+        when they are not the space group's own (a CIF's operations in another
+        setting, or no recognised space group), the symmetry operations as
+        'x,y,z' triplets."""
+        out = {"name": self.name, "cell": {k: float(v) for k, v in self.cell.items()},
+               "space_group": None if self.space_group is None else self.space_group.name,
+               "sites": [[s.label, s.element, s.scatterer, *(round(float(x), 6) for x in s.xyz),
+                          round(float(s.occupancy), 6), round(float(s.b_iso), 6)] for s in self.sites]}
+        if self.space_group is None or not same_ops(self.ops, self.space_group.all_ops()):
+            out["ops"] = [format_triplet(R, t) for R, t in self.ops]
+        if self.notes:
+            out["notes"] = list(self.notes)
+        return out
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Structure":
+        """The inverse of ``to_dict``."""
+        sg = SpaceGroup(d["space_group"]) if d.get("space_group") else None
+        ops = [parse_triplet(t) for t in d["ops"]] if d.get("ops") else None
+        sites = [Site(str(lab), str(el), str(scat), np.array([float(x), float(y), float(z)]),
+                      float(occ), float(b)) for lab, el, scat, x, y, z, occ, b in d["sites"]]
+        return cls(str(d.get("name", "")), {k: float(v) for k, v in d["cell"].items()}, sg, sites, ops,
+                   list(d.get("notes", [])))
 
     # --- the unit cell ---
 

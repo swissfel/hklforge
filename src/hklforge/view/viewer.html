@@ -3367,7 +3367,7 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   //              AUTO_EVERY of work, before "start fresh" / a restore);
   //   PREF_KEY   whether to remember at all ("0" = only explicit snapshots).
   // The page talks back through a hidden text widget (class diff3d-state-in):
-  // first {kind:"offer", ...}, then {kind:"memory", ...} whenever the
+  // first {kind:"offer", ..., address: the app page's URL}, then {kind:"memory", ...} whenever the
   // snapshots change. The app only starts sending autosaves after the offer,
   // so its defaults never overwrite the stored state. The app's requests
   // come as msg.memory.ops, numbered; each is done once.
@@ -3445,6 +3445,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     if (!doc.querySelector("." + ID + "-state-in input")) return;
     stateOffered = true;
     const offer = Object.assign({ kind: "offer" }, memoryReport());
+    // the address of the app's page: the app may take a state from it (a link)
+    try { offer.address = String(doc.location.href); } catch (e) { /* not readable */ }
     try {
       const stored = remembering() ? lsGet(STATE_KEY) : null;
       const rec = stored ? JSON.parse(stored) : null;
