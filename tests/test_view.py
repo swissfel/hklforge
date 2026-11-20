@@ -141,3 +141,28 @@ def test_structure_factor_nodes():
     assert json.loads(json.dumps(msg))["structureFactors"]["hkl"] == small["hkl"]
     with pytest.raises(ValueError):
         structure_factor_nodes(st)
+
+
+def test_examples_and_structure_atoms():
+    """The example CIFs load, and the atoms the page draws are every atom of
+    one cell with its element's radius and colour."""
+    from hklforge.crystal import examples
+    from hklforge.view import element_style, structure_atoms
+    assert examples.names() == ["Bi2Se3", "GaAs", "Si", "SrTiO3", "TiO2_rutile"]
+    per_cell = {"Bi2Se3": 15, "GaAs": 8, "Si": 8, "SrTiO3": 5, "TiO2_rutile": 6}
+    for name in examples.names():
+        st = examples.load(name)
+        assert examples.title(name) and "data_" in examples.cif_text(name)
+        sa = structure_atoms(st)
+        assert len(sa["atoms"]) == per_cell[name]
+        assert json.loads(json.dumps(sa)) == sa                       # JSON-ready
+        for label, el, x, y, z, b, occ in sa["atoms"]:
+            assert 0 <= x < 1 and 0 <= y < 1 and 0 <= z < 1 and b >= 0 and 0 < occ <= 1
+            assert sa["elements"][el] == list(element_style(el))
+    import pytest
+    with pytest.raises(ValueError):
+        examples.cif_text("nope")
+    # Cordero covalent radii and Jmol colours (the published values)
+    assert element_style("Si") == (1.11, "#f0c8a0") and element_style("O") == (0.66, "#ff0d0d")
+    assert element_style("Ti")[0] == 1.6 and element_style("Xx") == (1.5, "#909090")
+    assert message(structure=structure_atoms(examples.load("Si")))["structure"]["name"] == "Si"

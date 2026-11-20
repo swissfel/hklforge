@@ -152,7 +152,50 @@
           node, turning with the sample. Sphere volume is proportional to |F|&sup2;
           (radius to |F|<sup>2/3</sup>), so the sizes compare intensities; the slider scales
           all spheres together. At 1&times; the strongest one is 0.8 of the shortest of
-          a*, b*, c* across. Forbidden reflections (|F| = 0) get no sphere.</div>
+          a*, b*, c* across. Forbidden reflections (|F| = 0) get no sphere.
+          Without a structure: every lattice node the centring allows, all equal.</div>
+        <label class="chk"><input type="checkbox" id="sf-dw"> Debye&ndash;Waller falloff: |F|&sup2; &times; exp(&minus;2B s&sup2;), s = sin&theta;/&lambda;,
+          B = <input type="number" id="sf-b" min="0" max="50" step="0.1" value="0.5" style="width:60px"> &Aring;&sup2;</label>
+        <div class="hint">With a structure this B comes on top of the atoms' own (already in |F|).</div>
+      </div>
+      <label class="chk"><input type="checkbox" id="show-atoms"> real-space structure: atoms (experimental) <span id="atoms-info" style="color:#777"></span></label>
+      <div id="atoms-box" style="margin-left:18px; display:none">
+        <div class="row-controls" style="font-size:12px;">cells
+          <input type="number" id="atoms-na" min="1" max="6" step="1" value="1" style="width:46px"> &times;
+          <input type="number" id="atoms-nb" min="1" max="6" step="1" value="1" style="width:46px"> &times;
+          <input type="number" id="atoms-nc" min="1" max="6" step="1" value="1" style="width:46px">
+        </div>
+        <div class="angle-row">
+          <label><span>real-space scale &mdash; 1 &Aring; drawn as</span><span id="atoms-cm-val">3 cm</span></label>
+          <div class="row-controls">
+            <input type="range" id="atoms-cm" min="0.2" max="20" step="0.1" value="3" style="flex:1">
+            <input type="number" id="atoms-cm-num" min="0.05" max="50" step="any" value="3">
+          </div>
+        </div>
+        <div class="row-controls" style="font-size:12px;margin-top:4px;">size
+          <select id="atoms-size">
+            <option value="element">by element (half the covalent radius)</option>
+            <option value="equal">all equal</option>
+            <option value="thermal">Debye&ndash;Waller: 50 % probability sphere</option>
+          </select>
+        </div>
+        <div class="angle-row">
+          <label><span>atom size</span><span id="atoms-scale-val">1&times;</span></label>
+          <div class="row-controls">
+            <input type="range" id="atoms-scale" min="-1.301" max="1" step="0.001" value="0" style="flex:1">
+            <input type="number" id="atoms-scale-num" min="0.05" max="10" step="any" value="1">
+          </div>
+        </div>
+        <label class="chk"><input type="checkbox" id="show-poly"> coordination polyhedra around
+          <select id="poly-centre"></select></label>
+        <div class="hint">The atoms of the CIF in the real-space cell (the block of cells centred on
+          the sample, on their own scale above, turning with it), repeated over the cells chosen;
+          atoms on a cell face, edge or corner are drawn on every one of them.
+          Debye&ndash;Waller size: radius 1.538&middot;&radic;(B/8&pi;&sup2;), the sphere the atom is
+          in half the time (atoms without B: small dots). Polyhedra join the neighbours
+          of the chosen element closer than 1.2 &times; the sum of covalent radii, of the
+          element that comes closest (TiO<sub>6</sub> in SrTiO<sub>3</sub>, not the Sr further out). Without a structure: the lattice
+          points (with the centring), all equal.</div>
       </div>
       <label class="chk"><input type="checkbox" id="show-ewald"> show Ewald sphere (radius |k|)</label>
       <label class="chk"><input type="checkbox" id="show-det-patch"> show detector cut of the Ewald sphere</label>
@@ -1703,7 +1746,9 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
                          cmPerInvAng: 5, kMag: null, ub: null,
                          detW: 77, detH: 77,
                          showBzPoints: false, bz: null, refScene: null, surfScene: null,
-                         showSf: false, sf: null, sfScale: 1,
+                         showSf: false, sf: null, sfScale: 1, sfDw: false, sfB: 0.5,
+                         showAtoms: false, structure: null, atomsN: [1, 1, 1], atomsSize: "element",
+                         atomsScale: 1, showPoly: false, polyCentre: "", atomsCmPerA: 3,
                          virtual: { show: false, which: [] } };
 
     // Keeps the Ewald sphere inside the view box: it can be far larger than
@@ -2020,10 +2065,43 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     //     per reflection at its node, volume proportional to |F|^2, all drawn
     //     as one instanced mesh. Scale 1: the strongest is 0.8 of the
     //     shortest of a*, b*, c* across; recipState.sfScale multiplies all.
-    let lastSf = null;
+    let lastSf = null, lastSfSource = null, lastSfTotal = 0;
     const SF_COLOR = 0x2b7bb9;
+    // Without a structure: every node the centring allows with |q| <= 2|k|
+    // (d >= lambda/2), nearest first, at most 4000, all |F|^2 = 1.
+    function latticeNodes(A, B, C) {
+      const s = recScale(), qmax = 2 * recipState.kMag * s;
+      const bc = new THREE.Vector3().crossVectors(B, C), ca = new THREE.Vector3().crossVectors(C, A),
+            ab = new THREE.Vector3().crossVectors(A, B), vol = Math.abs(A.dot(bc));
+      if (!(vol > 0)) return { hkl: [], f2: [] };
+      // |h| <= qmax |a_real| / (2 pi) in scene units: the plane spacing along a*
+      const lim = [bc, ca, ab].map((v) => Math.floor(qmax * v.length() / vol + 1e-9));
+      if ((2 * lim[0] + 1) * (2 * lim[1] + 1) * (2 * lim[2] + 1) > 3e6) return { hkl: [], f2: [], tooMany: true };
+      const out = [];
+      for (let h = -lim[0]; h <= lim[0]; h++) for (let k = -lim[1]; k <= lim[1]; k++) for (let l = -lim[2]; l <= lim[2]; l++) {
+        if (!h && !k && !l) continue;
+        if (!isNode([h, k, l])) continue;
+        const q = nodePosition([h, k, l], A, B, C).length();
+        if (q <= qmax * (1 + 1e-9)) out.push([q, [h, k, l]]);
+      }
+      out.sort((a, b) => a[0] - b[0]);
+      const keep = out.slice(0, 4000);
+      return { hkl: keep.map((x) => x[1]), f2: keep.map(() => 1), total: out.length };
+    }
+
     function drawStructureFactors(A, B, C) {
-      const { hkl, f2 } = recipState.sf;
+      const data = recipState.sf && recipState.sf.hkl ? recipState.sf : latticeNodes(A, B, C);
+      const hkl = data.hkl;
+      let f2 = data.f2;
+      lastSfSource = data === recipState.sf ? "structure" : "lattice";
+      lastSfTotal = data.total || hkl.length;
+      if (recipState.sfDw && recipState.sfB > 0) {        // exp(-2 B s^2), s = |q| / 4 pi
+        const s = recScale();
+        f2 = f2.map((v, i) => {
+          const sq = nodePosition(hkl[i], A, B, C).length() / s / (4 * Math.PI);
+          return v * Math.exp(-2 * recipState.sfB * sq * sq);
+        });
+      }
       let fmax = 0;
       for (const v of f2) if (v > fmax) fmax = v;
       if (!(fmax > 0)) { lastSf = { spheres: 0, maxRadius: 0 }; return; }
@@ -2047,6 +2125,169 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         const i = hkl.findIndex((x) => x[0] === h[0] && x[1] === h[1] && x[2] === h[2]);
         return i < 0 || !(f2[i] > 1e-9 * fmax) ? 0 : r0 * Math.cbrt(f2[i] / fmax);
       }, A, B, C };
+    }
+
+    // --- real space (experimental): the atoms of msg.structure, or the
+    //     lattice points, in the real-space cell at the origin (phi frame,
+    //     drawn at 1/(2 pi) of the reciprocal scale: s / (2 pi) scene units
+    //     per angstrom), repeated over recipState.atomsN cells ----------------
+    let lastAtoms = null;
+    const CENTRING_POINTS = {
+      P: [[0, 0, 0]], I: [[0, 0, 0], [0.5, 0.5, 0.5]],
+      F: [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]],
+      C: [[0, 0, 0], [0.5, 0.5, 0]], A: [[0, 0, 0], [0, 0.5, 0.5]], B: [[0, 0, 0], [0.5, 0, 0.5]],
+      R: [[0, 0, 0], [2 / 3, 1 / 3, 1 / 3], [1 / 3, 2 / 3, 2 / 3]],
+    };
+    const DW_PROB50 = 1.5382;     // radius of the 50 % probability sphere in units of the rms displacement
+
+    // the convex hull of a few points (<= ~14): every triangle with all other
+    // points on one side is a face; returns [i, j, k] facing outwards
+    function hullFaces(P) {
+      const n = P.length, faces = [], c = new THREE.Vector3();
+      P.forEach((p) => c.add(p));
+      c.divideScalar(n);
+      let span = 0;
+      P.forEach((p) => { span = Math.max(span, p.distanceTo(c)); });
+      const eps = 1e-6 * span;
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let k = j + 1; k < n; k++) {
+        const nrm = new THREE.Vector3().subVectors(P[j], P[i]).cross(new THREE.Vector3().subVectors(P[k], P[i]));
+        if (nrm.length() < 1e-9 * span * span) continue;
+        nrm.normalize();
+        let pos = 0, neg = 0;
+        for (let m = 0; m < n; m++) {
+          if (m === i || m === j || m === k) continue;
+          const d = nrm.dot(new THREE.Vector3().subVectors(P[m], P[i]));
+          if (d > eps) pos++; else if (d < -eps) neg++;
+        }
+        if (pos && neg) continue;
+        if (!pos && !neg) continue;                     // all coplanar: no solid
+        faces.push(nrm.dot(new THREE.Vector3().subVectors(c, P[i])) > 0 ? [i, k, j] : [i, j, k]);
+      }
+      return faces;
+    }
+
+    function drawRealStructure(A, B, C, s) {
+      const bc = new THREE.Vector3().crossVectors(B, C);
+      const vol = A.dot(bc);
+      if (Math.abs(vol) < 1e-12) return;
+      // real basis in angstrom is 2 pi (b* x c*) / V* ...; drawn at perA scene units per angstrom
+      const perA = recipState.atomsCmPerA * 10 * SCENE_MM_SCALE;
+      const kk = s * s / vol * perA / (s / (2 * Math.PI));
+      const R = [bc.clone().multiplyScalar(kk), new THREE.Vector3().crossVectors(C, A).multiplyScalar(kk),
+                 new THREE.Vector3().crossVectors(A, B).multiplyScalar(kk)];
+      const N = recipState.atomsN.map((v) => Math.max(1, Math.min(6, Math.round(v) || 1)));
+      // the block of cells centred on the sample (the rotation centre)
+      const at = (f) => new THREE.Vector3().addScaledVector(R[0], f[0] - N[0] / 2)
+        .addScaledVector(R[1], f[1] - N[1] / 2).addScaledVector(R[2], f[2] - N[2] / 2);
+      const st = recipState.structure;
+      const minLen = Math.min(R[0].length(), R[1].length(), R[2].length());
+
+      // the base atoms: [element, frac, b_iso] in [0, 1)
+      let base, elements;
+      if (st && Array.isArray(st.atoms) && st.atoms.length) {
+        base = st.atoms.map((a) => [a[1], [a[2], a[3], a[4]].map((x) => ((x % 1) + 1) % 1), a[5] || 0]);
+        elements = st.elements || {};
+      } else {
+        const pts = CENTRING_POINTS[recipState.centring] || CENTRING_POINTS.P;
+        base = pts.map((f) => ["lattice point", f, 0]);
+        elements = { "lattice point": [0, "#555555"] };
+      }
+      const tol = 1e-4;
+      const images = [];                                 // [element, frac (unwrapped), b_iso]
+      for (const [el, f, b] of base) {
+        const ranges = f.map((x, ax) => {
+          const r = [];
+          for (let i = -1; i <= N[ax]; i++) if (x + i >= -tol && x + i <= N[ax] + tol) r.push(x + i);
+          return r;
+        });
+        for (const x of ranges[0]) for (const y of ranges[1]) for (const z of ranges[2]) images.push([el, [x, y, z], b]);
+      }
+      // sizes, in scene units
+      const mode = st ? recipState.atomsSize : "equal";
+      const radius = (el, b) => {
+        let r;
+        if (mode === "equal") r = st ? 0.35 * perA : 0.06 * minLen;
+        else if (mode === "thermal") r = Math.max(0.03, DW_PROB50 * Math.sqrt(Math.max(0, b) / (8 * Math.PI * Math.PI))) * perA;
+        else r = 0.5 * ((elements[el] && elements[el][0]) || 1.5) * perA;
+        return r * recipState.atomsScale;
+      };
+      const byEl = new Map();
+      for (const im of images) {
+        if (!byEl.has(im[0])) byEl.set(im[0], []);
+        byEl.get(im[0]).push(im);
+      }
+      const counts = {};
+      const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), sc = new THREE.Vector3();
+      for (const [el, list] of byEl) {
+        const color = new THREE.Color((elements[el] && elements[el][1]) || "#909090");
+        const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 18, 12),
+          new THREE.MeshStandardMaterial({ color, metalness: 0.05, roughness: 0.5, clippingPlanes: clipPlanes }), list.length);
+        list.forEach((im, j) => {
+          const r = radius(el, im[2]);
+          m4.compose(at(im[1]), q4, sc.set(r, r, r));
+          mesh.setMatrixAt(j, m4);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        cellGroup.add(mesh);
+        counts[el] = list.length;
+      }
+      // the cells, thin
+      const edges = [];
+      for (let i = 0; i < N[0]; i++) for (let j = 0; j < N[1]; j++) for (let k = 0; k < N[2]; k++) {
+        for (const e of CUBE_EDGES) for (const [x, y, z] of e) {
+          const p = at([i + x, j + y, k + z]);
+          edges.push(p.x, p.y, p.z);
+        }
+      }
+      const eg = new THREE.BufferGeometry();
+      eg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(edges), 3));
+      cellGroup.add(new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x999999, transparent: true, opacity: 0.6 })));
+
+      // coordination polyhedra
+      let polys = 0;
+      const vertexCounts = [];
+      const centre = recipState.polyCentre;
+      if (st && recipState.showPoly && centre && byEl.has(centre)) {
+        const rc = (elements[centre] && elements[centre][0]) || 1.5;
+        const cColor = new THREE.Color((elements[centre] && elements[centre][1]) || "#909090");
+        const mat = new THREE.MeshStandardMaterial({ color: cColor, transparent: true, opacity: 0.45, depthWrite: false,
+                                                     side: THREE.DoubleSide, clippingPlanes: clipPlanes });
+        const lineMat = new THREE.LineBasicMaterial({ color: cColor.clone().multiplyScalar(0.6) });
+        for (const [, cf] of byEl.get(centre)) {
+          const cpos = at(cf);
+          let near = [];
+          for (const [el, f] of base) {
+            const rn = (elements[el] && elements[el][0]) || 1.5;
+            const cut = 1.2 * (rc + rn) * perA;
+            const cell = cf.map(Math.floor);
+            for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+              const p = at([f[0] + cell[0] + a, f[1] + cell[1] + b, f[2] + cell[2] + c]);
+              const d = p.distanceTo(cpos);
+              if (d > 0.1 * perA && d <= cut) near.push([el, p, d]);
+            }
+          }
+          // the first shell: only the element that comes closest (O around Ti in SrTiO3, not Sr)
+          if (near.length) {
+            const first = near.reduce((a, b) => (b[2] < a[2] ? b : a))[0];
+            near = near.filter((x) => x[0] === first);
+          }
+          if (near.length < 4) continue;
+          const P = near.map((x) => x[1]);
+          const faces = hullFaces(P);
+          if (!faces.length) continue;
+          const pos = new Float32Array(faces.length * 9);
+          faces.forEach((f, i) => f.forEach((v, j) => { pos[9 * i + 3 * j] = P[v].x; pos[9 * i + 3 * j + 1] = P[v].y; pos[9 * i + 3 * j + 2] = P[v].z; }));
+          const g = new THREE.BufferGeometry();
+          g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+          g.computeVertexNormals();
+          cellGroup.add(new THREE.Mesh(g, mat));
+          cellGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 1), lineMat));
+          polys++;
+          vertexCounts.push(P.length);
+        }
+      }
+      lastAtoms = { counts, polyhedra: polys, vertices: vertexCounts, latticePoints: !st,
+                    radii: Object.fromEntries([...byEl.keys()].map((el) => [el, radius(el, byEl.get(el)[0][2]) / perA])) };
     }
 
     function updateRecip() {
@@ -2368,10 +2609,16 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         drawBzPoints(col(0), col(1), col(2));
       }
       lastSf = null;
-      if (recipState.ub && recipState.showSf && recipState.sf && recipState.sf.hkl) {
+      if (recipState.ub && recipState.showSf && ((recipState.sf && recipState.sf.hkl) || recipState.kMag)) {
         const U = recipState.ub;
         const col = (j) => new THREE.Vector3(U[0][j], U[1][j], U[2][j]).multiplyScalar(s);
         drawStructureFactors(col(0), col(1), col(2));
+      }
+      lastAtoms = null;
+      if (recipState.ub && recipState.showAtoms) {
+        const U = recipState.ub;
+        const col = (j) => new THREE.Vector3(U[0][j], U[1][j], U[2][j]).multiplyScalar(s);
+        drawRealStructure(col(0), col(1), col(2), s);
       }
       updateVirtual();
       lastDetNodes = detNodes;
@@ -2897,6 +3144,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
         virtualObjects: virtualGroup.children.length,
         bzPoints: lastBzCount,
         sfSpheres: lastSf ? lastSf.spheres : 0,
+        sfSource: lastSfSource,
+        atoms: lastAtoms,
         sfMaxRadiusPerInvAng: lastSf ? lastSf.maxRadius / recScale() : 0,
         detectorNodes: lastDetNodes,
         zone: bzCache.key ? { vertices: bzCache.vertices, edges: bzCache.edges.length } : null,
@@ -3091,6 +3340,18 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   const sfScaleEl = document.getElementById("sf-scale");
   const sfScaleNumEl = document.getElementById("sf-scale-num");
   let sfFactorVal = 1;               // exact when typed; the slider is log10 of it
+  const sfDwEl = document.getElementById("sf-dw");
+  const sfBEl = document.getElementById("sf-b");
+  const showAtomsEl = document.getElementById("show-atoms");
+  const atomsNEls = ["atoms-na", "atoms-nb", "atoms-nc"].map((id) => document.getElementById(id));
+  const atomsSizeEl = document.getElementById("atoms-size");
+  const atomsScaleEl = document.getElementById("atoms-scale");
+  const atomsScaleNumEl = document.getElementById("atoms-scale-num");
+  const showPolyEl = document.getElementById("show-poly");
+  const polyCentreEl = document.getElementById("poly-centre");
+  let atomsFactorVal = 1;
+  const atomsCmEl = document.getElementById("atoms-cm");
+  const atomsCmNumEl = document.getElementById("atoms-cm-num");
   const sfFactor = () => sfFactorVal;
   const fmtFactor = (f) => (f >= 10 ? f.toFixed(0) : f >= 1 ? f.toFixed(1) : f.toPrecision(2)).replace(/\.0$/, "");
   const showVirtualEl = document.getElementById("show-virtual");
@@ -3274,6 +3535,9 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   function refreshRecip() {
     document.getElementById("virtual-box").style.display = showVirtualEl.checked ? "" : "none";
     document.getElementById("sf-box").style.display = showSfEl.checked ? "" : "none";
+    document.getElementById("atoms-box").style.display = showAtomsEl.checked ? "" : "none";
+    document.getElementById("atoms-scale-val").textContent = fmtFactor(atomsFactorVal) + "\u00d7";
+    document.getElementById("atoms-cm-val").textContent = (parseFloat(atomsCmNumEl.value) || 3) + " cm";
     document.getElementById("sf-scale-val").textContent = fmtFactor(sfFactor()) + "\u00d7";
     const cm = parseFloat(recScaleEl.value);
     document.getElementById("rec-scale-val").textContent = cm.toFixed(1) + " cm";
@@ -3292,6 +3556,15 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       showBzPoints: showBzPointsEl.checked,
       showSf: showSfEl.checked,
       sfScale: sfFactor(),
+      sfDw: sfDwEl.checked,
+      sfB: Math.max(0, parseFloat(sfBEl.value) || 0),
+      showAtoms: showAtomsEl.checked,
+      atomsN: atomsNEls.map((e) => parseInt(e.value, 10) || 1),
+      atomsSize: atomsSizeEl.value,
+      atomsScale: atomsFactorVal,
+      atomsCmPerA: Math.max(0.05, parseFloat(atomsCmNumEl.value) || 3),
+      showPoly: showPolyEl.checked,
+      polyCentre: polyCentreEl.value,
       virtual: { show: showVirtualEl.checked, which: virtualShown() },
       cmPerInvAng: cm,
       detW: parseFloat(detWEl.value) || 77,
@@ -3331,6 +3604,55 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
   showDetBzEl.addEventListener("change", refreshRecip);
   showBzPointsEl.addEventListener("change", refreshRecip);
   showSfEl.addEventListener("change", refreshRecip);
+  sfDwEl.addEventListener("change", refreshRecip);
+  sfBEl.addEventListener("input", refreshRecip);
+  showAtomsEl.addEventListener("change", refreshRecip);
+  atomsNEls.forEach((e) => e.addEventListener("input", refreshRecip));
+  atomsSizeEl.addEventListener("change", refreshRecip);
+  showPolyEl.addEventListener("change", refreshRecip);
+  polyCentreEl.addEventListener("change", refreshRecip);
+  atomsCmEl.addEventListener("input", () => { atomsCmNumEl.value = atomsCmEl.value; refreshRecip(); });
+  atomsCmNumEl.addEventListener("input", () => {
+    const v = parseFloat(atomsCmNumEl.value);
+    if (!(v > 0)) return;
+    atomsCmEl.value = Math.max(0.2, Math.min(20, v));
+    refreshRecip();
+  });
+  atomsScaleEl.addEventListener("input", () => {
+    atomsFactorVal = Math.pow(10, parseFloat(atomsScaleEl.value));
+    atomsScaleNumEl.value = fmtFactor(atomsFactorVal);
+    refreshRecip();
+  });
+  atomsScaleNumEl.addEventListener("input", () => {
+    const v = parseFloat(atomsScaleNumEl.value);
+    if (!(v > 0)) return;
+    atomsFactorVal = Math.max(0.05, Math.min(10, v));
+    atomsScaleEl.value = Math.log10(atomsFactorVal);
+    refreshRecip();
+  });
+  // the polyhedron centre: one entry per element; by default the first whose
+  // neighbours are another element (a cation), else the first
+  let polyChosen = false;
+  polyCentreEl.addEventListener("change", () => { polyChosen = true; });
+  function setPolyElements(structure) {
+    const els = structure && structure.elements ? Object.keys(structure.elements) : [];
+    const old = polyCentreEl.value;
+    if (els.join(",") === [...polyCentreEl.options].map((o) => o.value).join(",")) return;
+    polyCentreEl.innerHTML = "";
+    for (const el of els) {
+      const o = document.createElement("option");
+      o.value = o.textContent = el;
+      polyCentreEl.appendChild(o);
+    }
+    if (polyChosen && els.includes(old)) polyCentreEl.value = old;
+    else if (els.length) {
+      const anion = new Set(["O", "S", "Se", "Te", "N", "F", "Cl", "Br", "I", "P", "As", "C", "H"]);
+      // the smallest cation (by covalent radius): Ti in SrTiO3, not Sr
+      const cations = els.filter((e) => !anion.has(e));
+      const r = (e) => (structure.elements[e] && structure.elements[e][0]) || 9;
+      polyCentreEl.value = cations.length ? cations.reduce((a, b) => (r(b) < r(a) ? b : a)) : els[0];
+    }
+  }
   sfScaleEl.addEventListener("input", () => {
     sfFactorVal = Math.pow(10, parseFloat(sfScaleEl.value));
     sfScaleNumEl.value = fmtFactor(sfFactor());
@@ -3371,7 +3693,8 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     showHklBz: showHklBzEl, showDetBz: showDetBzEl, showRealCell: showRealCellEl, showGhostDet: showGhostDetEl, enhanced3d: enhancedEl, rock3d: rockEl,
     showAngleControls: showAngleCtrlEl, controlsBelow: controlsBelowEl,
     showAxes: showAxesEl, showBzPoints: showBzPointsEl, showVirtual: showVirtualEl,
-    showStructureFactors: showSfEl,
+    showStructureFactors: showSfEl, sfDebyeWaller: sfDwEl,
+    showAtoms: showAtomsEl, showPolyhedra: showPolyEl,
   };
 
   function getDisplay() {
@@ -3379,6 +3702,12 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
     for (const [key, el] of Object.entries(displayChecks)) d[key] = el.checked;
     d.recScale = parseFloat(recScaleEl.value);
     d.sfScale = sfFactor();
+    d.sfB = parseFloat(sfBEl.value);
+    d.atomsN = atomsNEls.map((e) => parseInt(e.value, 10) || 1);
+    d.atomsSize = atomsSizeEl.value;
+    d.atomsScale = atomsFactorVal;
+    d.atomsCm = parseFloat(atomsCmNumEl.value);
+    d.polyCentre = polyCentreEl.value;
     d.tdet = tdet;
     d.detW = parseFloat(detWEl.value);
     d.detH = parseFloat(detHEl.value);
@@ -3400,6 +3729,19 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
       sfFactorVal = Math.max(0.01, Math.min(20, d.sfScale));
       sfScaleEl.value = Math.log10(sfFactorVal);
       sfScaleNumEl.value = fmtFactor(sfFactor());
+    }
+    if (typeof d.sfB === "number" && d.sfB >= 0) sfBEl.value = d.sfB;
+    if (Array.isArray(d.atomsN)) d.atomsN.forEach((v, i) => { if (atomsNEls[i] && v >= 1) atomsNEls[i].value = v; });
+    if (typeof d.atomsSize === "string" && [...atomsSizeEl.options].some((o) => o.value === d.atomsSize)) atomsSizeEl.value = d.atomsSize;
+    if (typeof d.atomsScale === "number" && d.atomsScale > 0) {
+      atomsFactorVal = Math.max(0.05, Math.min(10, d.atomsScale));
+      atomsScaleEl.value = Math.log10(atomsFactorVal);
+      atomsScaleNumEl.value = fmtFactor(atomsFactorVal);
+    }
+    if (typeof d.atomsCm === "number" && d.atomsCm > 0) { atomsCmNumEl.value = d.atomsCm; atomsCmEl.value = Math.max(0.2, Math.min(20, d.atomsCm)); }
+    if (typeof d.polyCentre === "string" && [...polyCentreEl.options].some((o) => o.value === d.polyCentre)) {
+      polyCentreEl.value = d.polyCentre;
+      polyChosen = true;
     }
     if (typeof d.detW === "number") detWEl.value = d.detW;
     if (typeof d.detH === "number") detHEl.value = d.detH;
@@ -3665,11 +4007,24 @@ window.HKLFORGE_VIEW = Object.assign({"id": "diff3d", "storage": "hklforge-viewe
           : "(" + (msg.bz.variant || msg.bz.lattice || "") + ")";
       }
       if (typeof msg.centring === "string") opts.centring = msg.centring;
+      if ("structure" in msg) {
+        const st = msg.structure;
+        opts.structure = st && Array.isArray(st.atoms) && st.atoms.length ? st : null;
+        setPolyElements(opts.structure);
+        opts.polyCentre = polyCentreEl.value;
+        const info = document.getElementById("atoms-info");
+        if (info) info.textContent = opts.structure
+          ? "(" + (opts.structure.name ? opts.structure.name + ", " : "") + opts.structure.atoms.length + " atoms per cell)"
+          : "(no structure: the lattice points)";
+        const noB = opts.structure && opts.structure.atoms.every((a) => !(a[5] > 0));
+        const th = [...atomsSizeEl.options].find((o) => o.value === "thermal");
+        if (th) th.textContent = "Debye\u2013Waller: 50 % probability sphere" + (noB ? " (this CIF has no B)" : "");
+      }
       if ("structureFactors" in msg) {
         const sf = msg.structureFactors;
         opts.sf = sf && Array.isArray(sf.hkl) && Array.isArray(sf.f2) ? sf : null;
         const info = document.getElementById("sf-info");
-        if (info) info.textContent = !opts.sf ? "(needs a structure: load a CIF)"
+        if (info) info.textContent = !opts.sf ? "(no structure: the lattice nodes, all equal)"
           : "(" + opts.sf.hkl.length + (opts.sf.total > opts.sf.hkl.length ? " of " + opts.sf.total : "")
             + " reflections" + (typeof opts.sf.energy === "number" ? ", " + (opts.sf.energy / 1000).toFixed(3) + " keV" : "") + ")";
       }

@@ -231,6 +231,18 @@ settings) + log size slider (`sfScale`, 0.01-20, typed values exact);
 volume ~ |F|^2, one `InstancedMesh` in cellGroup (phi frame). At 1x the
 strongest radius = 0.4 min(|a*|,|b*|,|c*|). `debugCounts().sfSpheres` and
 `__diffApp.sfRadius(hkl)` for browser checks. Verified in Chromium (docs/viewer.md).
+Also: without a structure the spheres are all centring-allowed nodes (equal);
+optional Debye-Waller falloff exp(-2B s^2) with a typed B.
+
+Real-space structure (experimental, same day): `structure_atoms(st)` ->
+`message(structure=...)`; page option "real-space structure: atoms" with
+n_a x n_b x n_c cells (block centred on the sample, own scale cm/A), size by
+element (covalent/2) | equal | Debye-Waller 50 % sphere (1.538 sqrt(B/8pi^2)),
+polyhedra around a chosen element (first-shell element only, cutoff 1.2 x
+sum of covalent radii, brute-force convex hull); without a structure the
+lattice points. `crystal/elements.json` (Cordero radii, Jmol colours, from
+ASE via `dev/make_element_table.py`), `crystal.examples` (5 CIFs).
+`debugCounts().atoms` for browser checks.
 
 ## Next
 

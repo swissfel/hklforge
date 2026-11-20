@@ -52,6 +52,24 @@ cells and Brillouin zones around Q and around target reflections, and:
   d ≥ λ/2 (all equivalents, nearest first, at most 4000) with its |F|² at that
   energy (f′ + i f″ included, so Friedel pairs differ near an edge); pass it as
   `message(..., structure_factors=...)`. Needs xraydb (`hklforge[crystal]`).
+  Without a structure the spheres are every lattice node the centring allows
+  (d ≥ λ/2), all equal. Optional **Debye–Waller falloff**: |F|² × exp(−2B s²),
+  s = sin θ/λ, with B typed in (on top of the atoms' own B when there is a
+  structure), so the spheres shrink with |Q|.
+- **Real-space structure (experimental)**: the atoms of the CIF
+  (`message(..., structure=structure_atoms(st))`) in a block of
+  n_a × n_b × n_c cells (1-6 each) centred on the sample, turning with it, on
+  their own scale ("1 Å drawn as … cm"). Atoms on a cell face, edge or corner
+  are drawn on each. Size: by element (half the covalent radius, Cordero
+  2008), all equal, or **Debye–Waller**: the 50 % probability sphere,
+  radius 1.538·√(B/8π²) (atoms without B: small dots); a slider scales all.
+  Colours: Jmol's. Optional **coordination polyhedra** around a chosen element
+  (default: the smallest cation, e.g. Ti in SrTiO₃): the convex hull of its
+  neighbours closer than 1.2 × the sum of covalent radii, of the element that
+  comes closest (TiO₆, not the Sr further out). Without a structure: the
+  lattice points of the cell with its centring, all equal. The radius and
+  colour table is `hklforge/crystal/elements.json`
+  (`dev/make_element_table.py`, from ASE's tables); `element_style(symbol)`.
 
 ```python
 from hklforge import Geometry
@@ -88,6 +106,17 @@ the slider resolution otherwise), and none are drawn with the option off.
 `tests/test_view.py` checks the data: the same |F|² as `reflection_list`,
 all reachable allowed nodes present, nearest first, Friedel pairs differing at
 the Ga K edge.
+
+Real-space structure and lattice nodes (2026-11-20, headless Chromium, against
+values computed independently in Python): for the five examples (Si 1×1×1,
+GaAs 2×1×1, SrTiO₃ 2×2×2, rutile 1×1×2, Bi₂Se₃ 1×1×1) the number of drawn
+atoms per element (with those on faces, edges and corners), the polyhedron
+centre and every coordination number (Si 4, Ga 4, Ti 6 in SrTiO₃ and rutile,
+Bi 6), and the radii in the element and Debye–Waller modes are the same;
+without a structure, the lattice points for P, F, I and R (8, 14, 9, 10) and
+the number of reciprocal nodes, all equal, and with the Debye–Waller falloff
+the radius ratio of the farthest to the nearest node equals
+exp(−2B Δs²)^(1/3) to 1e-6.
 
 ## The geometry explorer (`hklforge.view.explorer`)
 

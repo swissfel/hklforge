@@ -53,7 +53,7 @@ def geometry_message(geometry: Geometry) -> dict:
 def message(geometry: Geometry | None = None, angles: dict | None = None, *, ub=None,
             k: float | None = None, energy: float | None = None, surface=None, reference=None,
             label: str = "", targets=None, special_points: dict | None = None, n: int = 0,
-            structure_factors: dict | None = None, **extra) -> dict:
+            structure_factors: dict | None = None, structure: dict | None = None, **extra) -> dict:
     """The JSON the page reads (see the module docstring).
 
     ``geometry``: only needed when the page should change geometry (it is
@@ -63,7 +63,9 @@ def message(geometry: Geometry | None = None, angles: dict | None = None, *, ub=
     and alpha/beta/psi/naz/tau; ``targets``: reflections drawn as nodes;
     ``special_points``: :func:`hklforge.crystal.bz.special_points`;
     ``structure_factors``: :func:`structure_factor_nodes`, drawn as spheres
-    (volume proportional to abs(F)^2) when the page's option is on. Any
+    (volume proportional to abs(F)^2) when the page's option is on;
+    ``structure``: :func:`structure_atoms`, the atoms drawn in real space
+    (experimental option; without it the page draws the lattice points). Any
     further key (``display``, ``ghosts``, ``detectors``, ``memory`` ...)
     is passed on as is.
     """
@@ -92,6 +94,8 @@ def message(geometry: Geometry | None = None, angles: dict | None = None, *, ub=
                      "note": special_points.get("note", "")}
     if structure_factors is not None:
         msg["structureFactors"] = structure_factors
+    if structure is not None:
+        msg["structure"] = structure
     msg.update(extra)
     return msg
 
@@ -172,3 +176,30 @@ def payload_html(msg: dict, view_id: str = "diff3d") -> str:
     """The hidden element the page polls, holding ``msg``."""
     return (f'<span id="{view_id}-payload" style="display:none">'
             + _html.escape(json.dumps(msg)) + "</span>")
+
+
+ELEMENTS_JSON = Path(__file__).resolve().parent.parent / "crystal" / "elements.json"
+_ELEMENTS = None
+
+
+def element_style(symbol: str) -> tuple:
+    """(covalent radius in angstrom, colour "#rrggbb") of an element, for
+    drawing (Cordero 2008 radii, Jmol colours; ``elements.json``). Unknown
+    symbols get 1.5 angstrom and grey."""
+    global _ELEMENTS
+    if _ELEMENTS is None:
+        _ELEMENTS = json.loads(ELEMENTS_JSON.read_text())["elements"]
+    e = _ELEMENTS.get(symbol) or _ELEMENTS.get(symbol[:1].upper() + symbol[1:].lower())
+    return (1.5, "#909090") if e is None else (float(e[1]), str(e[2]))
+
+
+def structure_atoms(structure) -> dict:
+    """The atoms of one unit cell for the page's real-space drawing
+    (``message(structure=...)``): ``{"name", "atoms": [[label, element, x,
+    y, z, b_iso, occupancy], ...] (fractional, every atom of the cell),
+    "elements": {element: [covalent radius A, colour]}}``. numpy only."""
+    sites, X = structure.atoms()
+    atoms = [[s.label, s.element, *(round(float(v), 6) for v in x), round(float(s.b_iso), 4),
+              round(float(s.occupancy), 4)] for s, x in zip(sites, X)]
+    elements = {el: list(element_style(el)) for el in dict.fromkeys(s.element for s in sites)}
+    return {"name": structure.name, "atoms": atoms, "elements": elements}

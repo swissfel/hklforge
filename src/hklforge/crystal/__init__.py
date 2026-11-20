@@ -14,7 +14,10 @@
   axis maps onto each other (needs ``pandas``);
 - :mod:`.bz` - high-symmetry points of the first Brillouin zone and the
   standard paths (Setyawan & Curtarolo) as (h, k, l) of the conventional
-  cell, each checked to lie on the zone boundary.
+  cell, each checked to lie on the zone boundary;
+- :mod:`.examples` - a few small CIFs to try things with (Si, GaAs, SrTiO3,
+  rutile, Bi2Se3); ``elements.json``: covalent radius and colour per element
+  for drawing (``dev/make_element_table.py``).
 
 Same conventions as the rest of hklforge: reciprocal vectors carry 2 pi,
 B is Busing & Levy's (:func:`hklforge.lattice.b_matrix`). numpy only at

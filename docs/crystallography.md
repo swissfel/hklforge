@@ -73,6 +73,18 @@ that makes F(h) ≠ F(−h) for non-centrosymmetric crystals. When a CIF leaves
 the origin choice or the rhombohedral axes open, `read_cif` picks one and says
 so in `st.notes`.
 
+## Examples
+
+`hklforge.crystal.examples`: small CIFs to try things with (textbook values):
+Si, GaAs, SrTiO₃, rutile TiO₂, Bi₂Se₃ (hexagonal axes).
+
+```python
+from hklforge.crystal import examples
+examples.names()                  # ['Bi2Se3', 'GaAs', 'Si', 'SrTiO3', 'TiO2_rutile']
+st = examples.load("SrTiO3")      # a Structure
+text = examples.cif_text("Si")    # the CIF itself, e.g. for an upload field
+```
+
 ## Reflection lists and groups
 
 ```python

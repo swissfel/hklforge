@@ -40,7 +40,8 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "hklforge.geometries" = ["*.yml"]
-"hklforge.crystal" = ["spacegroups.json"]
+"hklforge.crystal" = ["spacegroups.json", "elements.json"]
+"hklforge.crystal.examples" = ["*.cif"]
 "hklforge.view" = ["viewer.html"]
 
 [tool.setuptools_scm]
